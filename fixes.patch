@@ -1,0 +1,56 @@
+diff --git a/arch/x86/kernel/cpu/bugs.c b/arch/x86/kernel/cpu/bugs.c
+index 5fba44a..8481b49 100644
+--- a/arch/x86/kernel/cpu/bugs.c
++++ b/arch/x86/kernel/cpu/bugs.c
+@@ -1946,7 +1946,6 @@ static void update_mds_branch_idle(void)
+ 	}
+ }
+ 
+-#define MDS_MSG_SMT "MDS CPU bug present and SMT on, data leak possible. See https://www.kernel.org/doc/html/latest/admin-guide/hw-vuln/mds.html for more details.\n"
+ #define TAA_MSG_SMT "TAA CPU bug present and SMT on, data leak possible. See https://www.kernel.org/doc/html/latest/admin-guide/hw-vuln/tsx_async_abort.html for more details.\n"
+ #define MMIO_MSG_SMT "MMIO Stale Data CPU bug present and SMT on, data leak possible. See https://www.kernel.org/doc/html/latest/admin-guide/hw-vuln/processor_mmio_stale_data.html for more details.\n"
+ 
+@@ -1974,8 +1973,6 @@ void cpu_bugs_smt_update(void)
+ 	switch (mds_mitigation) {
+ 	case MDS_MITIGATION_FULL:
+ 	case MDS_MITIGATION_VMWERV:
+-		if (sched_smt_active() && !boot_cpu_has(X86_BUG_MSBDS_ONLY))
+-			pr_warn_once(MDS_MSG_SMT);
+ 		update_mds_branch_idle();
+ 		break;
+ 	case MDS_MITIGATION_OFF:
+diff --git a/arch/x86/kernel/cpu/intel_epb.c b/arch/x86/kernel/cpu/intel_epb.c
+index 30b1d63..67b5bac 100644
+--- a/arch/x86/kernel/cpu/intel_epb.c
++++ b/arch/x86/kernel/cpu/intel_epb.c
+@@ -108,7 +108,6 @@ static void intel_epb_restore(void)
+ 		val = epb & EPB_MASK;
+ 		if (val == ENERGY_PERF_BIAS_PERFORMANCE) {
+ 			val = energ_perf_values[EPB_INDEX_NORMAL];
+-			pr_warn_once("ENERGY_PERF_BIAS: Set to 'normal', was 'performance'\n");
+ 		}
+ 	}
+ 	wrmsrl(MSR_IA32_ENERGY_PERF_BIAS, (epb & ~EPB_MASK) | val);
+diff --git a/security/lockdown/lockdown.c b/security/lockdown/lockdown.c
+index f2bdbd5..40ab2ec 100644
+--- a/security/lockdown/lockdown.c
++++ b/security/lockdown/lockdown.c
+@@ -30,8 +30,6 @@ static int lock_kernel_down(const char *where, enum lockdown_reason level)
+ 		return -EPERM;
+ 
+ 	kernel_locked_down = level;
+-	pr_notice("Kernel is locked down from %s; see man kernel_lockdown.7\n",
+-		  where);
+ 	return 0;
+ }
+ 
+@@ -63,9 +61,6 @@ static int lockdown_is_locked_down(enum lockdown_reason what)
+ 		return -EPERM;
+ 
+ 	if (kernel_locked_down >= what) {
+-		if (lockdown_reasons[what])
+-			pr_notice_ratelimited("Lockdown: %s: %s is restricted; see man kernel_lockdown.7\n",
+-				  current->comm, lockdown_reasons[what]);
+ 		return -EPERM;
+ 	}
+ 
