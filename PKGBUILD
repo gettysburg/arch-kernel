@@ -1,7 +1,7 @@
 # Maintainer: Jan Alexander Steffens (heftig) <heftig@archlinux.org>
 
 pkgbase=linux-custom
-pkgver=6.13.8.arch1
+pkgver=6.14
 pkgrel=1
 pkgdesc='Linux'
 url='https://github.com/archlinux/linux'
@@ -29,8 +29,7 @@ options=(
   !debug
   !strip
 )
-_srcname=linux-${pkgver%.*}
-_srctag=v${pkgver%.*}-${pkgver##*.}
+_srcname=linux-${pkgver}
 source=(
   https://cdn.kernel.org/pub/linux/kernel/v${pkgver%%.*}.x/${_srcname}.tar.{xz,sign}
   fixes.patch
@@ -42,14 +41,14 @@ validpgpkeys=(
   83BC8889351B5DEBBB68416EB8AC08600F108CDF  # Jan Alexander Steffens (heftig)
 )
 # https://www.kernel.org/pub/linux/kernel/v6.x/sha256sums.asc
-sha256sums=('259afa59d73d676bec2ae89beacd949e08d54d3f70a7f8b0a742315095751abb'
+sha256sums=('a294b683e7b161bb0517bb32ec7ed1d2ea7603dfbabad135170ed12d00c47670'
             'SKIP'
-            'ee5fcefff0fcc1975724749789139b5ea33d57b7b3d10bc19e1d3c4465751342'
-            '43a018520e0cfb60548d380cb9f4a3690def4fdd551078057320f22060b2207d')
-b2sums=('c20916a44a07d355ba8337229f102cd507deae92c88576040965e909fa89c09f98611746a8c8f249bc3dcf492238ce3f08c48f523670ccad4bd7ec21622806af'
+            'a48243f35c6e4d04031afebf4a7167c714c4d7b8ddc3d94f2f7374ee90cb9eb3'
+            'de9ba9c2617fc6ba7a2752062184b53d733aadfb763e5f6d341b0465ee939356')
+b2sums=('11835719804b406fe281ea1c276a84dc0cbaa808552ddcca9233d3eaeb1c001d0455c7205379b02de8e8db758c1bae6fe7ceb6697e63e3cf9ae7187dc7a9715e'
         'SKIP'
-        '5ce41a0ff01e81ebd5b186cb39ed2baff7455466483816719b8470e621afffb0367e928cedcb9daf3e6f1adda6b90fea68b6f360253c6f4b80f4c599e5dd1e86'
-        '37bcc0b87345b6445a5d20009861413db6015c5716b7113d9964b99e818f9531fee23a0d05943ed3a6323a3ae10876b6355f611b0f79d8bd438670f39e14736a')
+        'b49cf451727d6db51467b8892d26af466c1aefb168bcf3d2c2cf8e5ab426e7c382c931edd60d56cba881d5e2a0e7e3650c6bb1a0783eb2e7340b6a42f89f7671'
+        'db937cdb546f42937aba3d50acda0b8f15c9dd4ae914908b05cae5648376032309c2fa0d835dfb308e58aced247f0773f7da82760a93c35e1fd477c995c4549a')
 
 export KBUILD_BUILD_HOST=archlinux
 export KBUILD_BUILD_USER=$pkgbase
