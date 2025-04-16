@@ -74,39 +74,6 @@ index 472540a..6c2986d 100644
  
  int main(int argc, char **argv)
  {
-diff --git a/drivers/edac/igen6_edac.c b/drivers/edac/igen6_edac.c
-index fdf3a84..595908a 100644
---- a/drivers/edac/igen6_edac.c
-+++ b/drivers/edac/igen6_edac.c
-@@ -785,13 +785,22 @@ static u64 ecclog_read_and_clear(struct igen6_imc *imc)
- {
- 	u64 ecclog = readq(imc->window + ECC_ERROR_LOG_OFFSET);
- 
--	if (ecclog & (ECC_ERROR_LOG_CE | ECC_ERROR_LOG_UE)) {
--		/* Clear CE/UE bits by writing 1s */
--		writeq(ecclog, imc->window + ECC_ERROR_LOG_OFFSET);
--		return ecclog;
--	}
-+	/*
-+	 * Quirk: The ECC_ERROR_LOG register of certain SoCs may contain
-+	 *        the invalid value ~0. This will result in a flood of invalid
-+	 *        error reports in polling mode. Skip it.
-+	 */
-+	if (ecclog == ~0)
-+		return 0;
- 
--	return 0;
-+	/* Neither a CE nor a UE. Skip it.*/
-+	if (!(ecclog & (ECC_ERROR_LOG_CE | ECC_ERROR_LOG_UE)))
-+		return 0;
-+
-+	/* Clear CE/UE bits by writing 1s */
-+	writeq(ecclog, imc->window + ECC_ERROR_LOG_OFFSET);
-+
-+	return ecclog;
- }
- 
- static void errsts_clear(struct igen6_imc *imc)
 diff --git a/drivers/firmware/sysfb.c b/drivers/firmware/sysfb.c
 index 7c5c03f..a60b0a4 100644
 --- a/drivers/firmware/sysfb.c
@@ -181,10 +148,10 @@ index 7183e5a..5657337 100644
  {
  	return &init_user_ns;
 diff --git a/init/Kconfig b/init/Kconfig
-index 324c288..d27802a 100644
+index 5ab47c3..cd8c81e 100644
 --- a/init/Kconfig
 +++ b/init/Kconfig
-@@ -1323,6 +1323,22 @@ config USER_NS
+@@ -1328,6 +1328,22 @@ config USER_NS
  
  	  If unsure, say N.
  
@@ -208,7 +175,7 @@ index 324c288..d27802a 100644
  	bool "PID Namespaces"
  	default y
 diff --git a/kernel/fork.c b/kernel/fork.c
-index 735405a..d9658b5 100644
+index ca2ca38..d47d85b 100644
 --- a/kernel/fork.c
 +++ b/kernel/fork.c
 @@ -106,6 +106,10 @@
@@ -222,7 +189,7 @@ index 735405a..d9658b5 100644
  #include <asm/pgalloc.h>
  #include <linux/uaccess.h>
  #include <asm/mmu_context.h>
-@@ -2167,6 +2171,10 @@ __latent_entropy struct task_struct *copy_process(
+@@ -2171,6 +2175,10 @@ __latent_entropy struct task_struct *copy_process(
  	if ((clone_flags & (CLONE_NEWUSER|CLONE_FS)) == (CLONE_NEWUSER|CLONE_FS))
  		return ERR_PTR(-EINVAL);
  
@@ -233,7 +200,7 @@ index 735405a..d9658b5 100644
  	/*
  	 * Thread groups must share signals as well, and detached threads
  	 * can only be started up within the thread group.
-@@ -3320,6 +3328,12 @@ int ksys_unshare(unsigned long unshare_flags)
+@@ -3324,6 +3332,12 @@ int ksys_unshare(unsigned long unshare_flags)
  	if (unshare_flags & CLONE_NEWNS)
  		unshare_flags |= CLONE_FS;
  
