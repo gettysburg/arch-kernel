@@ -125,6 +125,26 @@ index f9a4d08..0f808ff 100644
  	/* get MES scheduler/KIQ versions */
  	mutex_lock(&adev->srbm_mutex);
  
+diff --git a/drivers/net/wireless/intel/iwlwifi/pcie/trans-gen2.c b/drivers/net/wireless/intel/iwlwifi/pcie/trans-gen2.c
+index 793514a..e37fa5a 100644
+--- a/drivers/net/wireless/intel/iwlwifi/pcie/trans-gen2.c
++++ b/drivers/net/wireless/intel/iwlwifi/pcie/trans-gen2.c
+@@ -147,8 +147,14 @@ static void _iwl_trans_pcie_gen2_stop_device(struct iwl_trans *trans)
+ 		return;
+ 
+ 	if (trans->state >= IWL_TRANS_FW_STARTED &&
+-	    trans_pcie->fw_reset_handshake)
++	    trans_pcie->fw_reset_handshake) {
++		/*
++		 * Reset handshake can dump firmware on timeout, but that
++		 * should assume that the firmware is already dead.
++		 */
++		trans->state = IWL_TRANS_NO_FW;
+ 		iwl_trans_pcie_fw_reset_handshake(trans);
++	}
+ 
+ 	trans_pcie->is_down = true;
+ 
 diff --git a/include/linux/user_namespace.h b/include/linux/user_namespace.h
 index 7183e5a..5657337 100644
 --- a/include/linux/user_namespace.h
@@ -282,10 +302,10 @@ index 35796c2..a6da7f4 100644
  	bool "Test hw_breakpoint constraints accounting" if !KUNIT_ALL_TESTS
  	depends on HAVE_HW_BREAKPOINT
 diff --git a/lib/Makefile b/lib/Makefile
-index d5cfc7a..e8fec9d 100644
+index 4f3d00a..9a54526 100644
 --- a/lib/Makefile
 +++ b/lib/Makefile
-@@ -393,6 +393,8 @@ obj-$(CONFIG_FORTIFY_KUNIT_TEST) += fortify_kunit.o
+@@ -398,6 +398,8 @@ obj-$(CONFIG_FORTIFY_KUNIT_TEST) += fortify_kunit.o
  obj-$(CONFIG_CRC_KUNIT_TEST) += crc_kunit.o
  obj-$(CONFIG_SIPHASH_KUNIT_TEST) += siphash_kunit.o
  obj-$(CONFIG_USERCOPY_KUNIT_TEST) += usercopy_kunit.o
@@ -296,7 +316,7 @@ index d5cfc7a..e8fec9d 100644
  
 diff --git b/lib/longest_symbol_kunit.c b/lib/longest_symbol_kunit.c
 new file mode 100644
-index 0000000..e3c28ff
+index 0000000..c2dbcda
 --- /dev/null
 +++ b/lib/longest_symbol_kunit.c
 @@ -0,0 +1,82 @@
