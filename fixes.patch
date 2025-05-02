@@ -110,41 +110,6 @@ index 7c5c03f..a60b0a4 100644
  		pd = sysfb_create_simplefb(si, &mode, parent);
  		if (!IS_ERR(pd))
  			goto put_device;
-diff --git a/drivers/gpu/drm/amd/amdgpu/mes_v11_0.c b/drivers/gpu/drm/amd/amdgpu/mes_v11_0.c
-index f9a4d08..0f808ff 100644
---- a/drivers/gpu/drm/amd/amdgpu/mes_v11_0.c
-+++ b/drivers/gpu/drm/amd/amdgpu/mes_v11_0.c
-@@ -899,6 +899,10 @@ static void mes_v11_0_get_fw_version(struct amdgpu_device *adev)
- {
- 	int pipe;
- 
-+	/* return early if we have already fetched these */
-+	if (adev->mes.sched_version && adev->mes.kiq_version)
-+		return;
-+
- 	/* get MES scheduler/KIQ versions */
- 	mutex_lock(&adev->srbm_mutex);
- 
-diff --git a/drivers/net/wireless/intel/iwlwifi/pcie/trans-gen2.c b/drivers/net/wireless/intel/iwlwifi/pcie/trans-gen2.c
-index 793514a..e37fa5a 100644
---- a/drivers/net/wireless/intel/iwlwifi/pcie/trans-gen2.c
-+++ b/drivers/net/wireless/intel/iwlwifi/pcie/trans-gen2.c
-@@ -147,8 +147,14 @@ static void _iwl_trans_pcie_gen2_stop_device(struct iwl_trans *trans)
- 		return;
- 
- 	if (trans->state >= IWL_TRANS_FW_STARTED &&
--	    trans_pcie->fw_reset_handshake)
-+	    trans_pcie->fw_reset_handshake) {
-+		/*
-+		 * Reset handshake can dump firmware on timeout, but that
-+		 * should assume that the firmware is already dead.
-+		 */
-+		trans->state = IWL_TRANS_NO_FW;
- 		iwl_trans_pcie_fw_reset_handshake(trans);
-+	}
- 
- 	trans_pcie->is_down = true;
- 
 diff --git a/include/linux/user_namespace.h b/include/linux/user_namespace.h
 index 7183e5a..5657337 100644
 --- a/include/linux/user_namespace.h
@@ -316,7 +281,7 @@ index 4f3d00a..9a54526 100644
  
 diff --git b/lib/longest_symbol_kunit.c b/lib/longest_symbol_kunit.c
 new file mode 100644
-index 0000000..c2dbcda
+index 0000000..e3c28ff
 --- /dev/null
 +++ b/lib/longest_symbol_kunit.c
 @@ -0,0 +1,82 @@
