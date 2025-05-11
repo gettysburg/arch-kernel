@@ -21,7 +21,7 @@ index b8a4ff3..9b087f9 100644
  	help
  	  This value can be used to select the number of bits to use to
 diff --git a/arch/x86/kernel/cpu/bugs.c b/arch/x86/kernel/cpu/bugs.c
-index a5d0998..462a6d8 100644
+index 9152285..6804ee3 100644
 --- a/arch/x86/kernel/cpu/bugs.c
 +++ b/arch/x86/kernel/cpu/bugs.c
 @@ -1946,7 +1946,6 @@ static void update_mds_branch_idle(void)
@@ -133,7 +133,7 @@ index 7183e5a..5657337 100644
  {
  	return &init_user_ns;
 diff --git a/init/Kconfig b/init/Kconfig
-index 5ab47c3..cd8c81e 100644
+index dc7b10a..62fcc83 100644
 --- a/init/Kconfig
 +++ b/init/Kconfig
 @@ -1328,6 +1328,22 @@ config USER_NS
