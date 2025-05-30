@@ -21,10 +21,10 @@ index b8a4ff3..9b087f9 100644
  	help
  	  This value can be used to select the number of bits to use to
 diff --git a/arch/x86/kernel/cpu/bugs.c b/arch/x86/kernel/cpu/bugs.c
-index 9152285..6804ee3 100644
+index b699499..05fb5d4 100644
 --- a/arch/x86/kernel/cpu/bugs.c
 +++ b/arch/x86/kernel/cpu/bugs.c
-@@ -1946,7 +1946,6 @@ static void update_mds_branch_idle(void)
+@@ -2095,7 +2095,6 @@ static void update_mds_branch_idle(void)
  	}
  }
  
@@ -32,7 +32,7 @@ index 9152285..6804ee3 100644
  #define TAA_MSG_SMT "TAA CPU bug present and SMT on, data leak possible. See https://www.kernel.org/doc/html/latest/admin-guide/hw-vuln/tsx_async_abort.html for more details.\n"
  #define MMIO_MSG_SMT "MMIO Stale Data CPU bug present and SMT on, data leak possible. See https://www.kernel.org/doc/html/latest/admin-guide/hw-vuln/processor_mmio_stale_data.html for more details.\n"
  
-@@ -1974,8 +1973,6 @@ void cpu_bugs_smt_update(void)
+@@ -2123,8 +2122,6 @@ void cpu_bugs_smt_update(void)
  	switch (mds_mitigation) {
  	case MDS_MITIGATION_FULL:
  	case MDS_MITIGATION_VMWERV:
@@ -74,6 +74,20 @@ index 472540a..6c2986d 100644
  
  int main(int argc, char **argv)
  {
+diff --git a/drivers/block/loop.c b/drivers/block/loop.c
+index b378d2a..34bc46d 100644
+--- a/drivers/block/loop.c
++++ b/drivers/block/loop.c
+@@ -972,9 +972,6 @@ static int loop_configure(struct loop_device *lo, blk_mode_t mode,
+ 	if (!file)
+ 		return -EBADF;
+ 
+-	if ((mode & BLK_OPEN_WRITE) && !file->f_op->write_iter)
+-		return -EINVAL;
+-
+ 	error = loop_check_backing_file(file);
+ 	if (error)
+ 		return error;
 diff --git a/drivers/firmware/sysfb.c b/drivers/firmware/sysfb.c
 index 7c5c03f..a60b0a4 100644
 --- a/drivers/firmware/sysfb.c
@@ -110,71 +124,67 @@ index 7c5c03f..a60b0a4 100644
  		pd = sysfb_create_simplefb(si, &mode, parent);
  		if (!IS_ERR(pd))
  			goto put_device;
-diff --git a/include/linux/user_namespace.h b/include/linux/user_namespace.h
-index 7183e5a..5657337 100644
---- a/include/linux/user_namespace.h
-+++ b/include/linux/user_namespace.h
-@@ -159,6 +159,8 @@ static inline void set_userns_rlimit_max(struct user_namespace *ns,
+diff --git a/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.c b/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.c
+index 2dbd71f..e4f0517 100644
+--- a/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.c
++++ b/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.c
+@@ -668,21 +668,15 @@ static void dm_crtc_high_irq(void *interrupt_params)
+ 	spin_lock_irqsave(&adev_to_drm(adev)->event_lock, flags);
  
- #ifdef CONFIG_USER_NS
+ 	if (acrtc->dm_irq_params.stream &&
+-		acrtc->dm_irq_params.vrr_params.supported) {
+-		bool replay_en = acrtc->dm_irq_params.stream->link->replay_settings.replay_feature_enabled;
+-		bool psr_en = acrtc->dm_irq_params.stream->link->psr_settings.psr_feature_enabled;
+-		bool fs_active_var_en = acrtc->dm_irq_params.freesync_config.state == VRR_STATE_ACTIVE_VARIABLE;
+-
++	    acrtc->dm_irq_params.vrr_params.supported &&
++	    acrtc->dm_irq_params.freesync_config.state ==
++		    VRR_STATE_ACTIVE_VARIABLE) {
+ 		mod_freesync_handle_v_update(adev->dm.freesync_module,
+ 					     acrtc->dm_irq_params.stream,
+ 					     &acrtc->dm_irq_params.vrr_params);
  
-+extern int unprivileged_userns_clone;
-+
- static inline struct user_namespace *get_user_ns(struct user_namespace *ns)
- {
- 	if (ns)
-@@ -192,6 +194,8 @@ extern bool current_in_userns(const struct user_namespace *target_ns);
- struct ns_common *ns_get_owner(struct ns_common *ns);
- #else
+-		/* update vmin_vmax only if freesync is enabled, or only if PSR and REPLAY are disabled */
+-		if (fs_active_var_en || (!fs_active_var_en && !replay_en && !psr_en)) {
+-			dc_stream_adjust_vmin_vmax(adev->dm.dc,
+-					acrtc->dm_irq_params.stream,
+-					&acrtc->dm_irq_params.vrr_params.adjust);
+-		}
++		dc_stream_adjust_vmin_vmax(adev->dm.dc, acrtc->dm_irq_params.stream,
++					   &acrtc->dm_irq_params.vrr_params.adjust);
+ 	}
  
-+#define unprivileged_userns_clone 0
-+
- static inline struct user_namespace *get_user_ns(struct user_namespace *ns)
- {
- 	return &init_user_ns;
-diff --git a/init/Kconfig b/init/Kconfig
-index dc7b10a..62fcc83 100644
---- a/init/Kconfig
-+++ b/init/Kconfig
-@@ -1328,6 +1328,22 @@ config USER_NS
+ 	/*
+diff --git a/include/net/bluetooth/hci_core.h b/include/net/bluetooth/hci_core.h
+index 7d8bab8..e21abd8 100644
+--- a/include/net/bluetooth/hci_core.h
++++ b/include/net/bluetooth/hci_core.h
+@@ -1778,6 +1778,7 @@ struct hci_conn_params *hci_pend_le_action_lookup(struct list_head *list,
+ void hci_uuids_clear(struct hci_dev *hdev);
  
- 	  If unsure, say N.
- 
-+config USER_NS_UNPRIVILEGED
-+	bool "Allow unprivileged users to create namespaces"
-+	default y
-+	depends on USER_NS
-+	help
-+	  When disabled, unprivileged users will not be able to create
-+	  new namespaces. Allowing users to create their own namespaces
-+	  has been part of several recent local privilege escalation
-+	  exploits, so if you need user namespaces but are
-+	  paranoid^Wsecurity-conscious you want to disable this.
-+
-+	  This setting can be overridden at runtime via the
-+	  kernel.unprivileged_userns_clone sysctl.
-+
-+	  If unsure, say Y.
-+
- config PID_NS
- 	bool "PID Namespaces"
- 	default y
+ void hci_link_keys_clear(struct hci_dev *hdev);
++u8 *hci_conn_key_enc_size(struct hci_conn *conn);
+ struct link_key *hci_find_link_key(struct hci_dev *hdev, bdaddr_t *bdaddr);
+ struct link_key *hci_add_link_key(struct hci_dev *hdev, struct hci_conn *conn,
+ 				  bdaddr_t *bdaddr, u8 *val, u8 type,
 diff --git a/kernel/fork.c b/kernel/fork.c
-index ca2ca38..d47d85b 100644
+index ca2ca38..d9591a8 100644
 --- a/kernel/fork.c
 +++ b/kernel/fork.c
-@@ -106,6 +106,10 @@
- #include <linux/pidfs.h>
- #include <linux/tick.h>
+@@ -119,6 +119,12 @@
+ 
+ #include <kunit/visibility.h>
  
 +#ifdef CONFIG_USER_NS
-+#include <linux/user_namespace.h>
++extern int unprivileged_userns_clone;
++#else
++#define unprivileged_userns_clone 0
 +#endif
 +
- #include <asm/pgalloc.h>
- #include <linux/uaccess.h>
- #include <asm/mmu_context.h>
-@@ -2171,6 +2175,10 @@ __latent_entropy struct task_struct *copy_process(
+ /*
+  * Minimum number of threads to boot the kernel
+  */
+@@ -2171,6 +2177,10 @@ __latent_entropy struct task_struct *copy_process(
  	if ((clone_flags & (CLONE_NEWUSER|CLONE_FS)) == (CLONE_NEWUSER|CLONE_FS))
  		return ERR_PTR(-EINVAL);
  
@@ -185,7 +195,7 @@ index ca2ca38..d47d85b 100644
  	/*
  	 * Thread groups must share signals as well, and detached threads
  	 * can only be started up within the thread group.
-@@ -3324,6 +3332,12 @@ int ksys_unshare(unsigned long unshare_flags)
+@@ -3324,6 +3334,12 @@ int ksys_unshare(unsigned long unshare_flags)
  	if (unshare_flags & CLONE_NEWNS)
  		unshare_flags |= CLONE_FS;
  
@@ -199,20 +209,21 @@ index ca2ca38..d47d85b 100644
  	if (err)
  		goto bad_unshare_out;
 diff --git a/kernel/sysctl.c b/kernel/sysctl.c
-index cb57da4..f7f1c25 100644
+index cb57da4..0caad93 100644
 --- a/kernel/sysctl.c
 +++ b/kernel/sysctl.c
-@@ -80,6 +80,9 @@
- #ifdef CONFIG_RT_MUTEXES
- #include <linux/rtmutex.h>
- #endif
-+#ifdef CONFIG_USER_NS
-+#include <linux/user_namespace.h>
-+#endif
+@@ -100,6 +100,10 @@ static const int six_hundred_forty_kb = 640 * 1024;
+ static const int ngroups_max = NGROUPS_MAX;
+ static const int cap_last_cap = CAP_LAST_CAP;
  
- /* shared constants to be used in various sysctls */
- const int sysctl_vals[] = { 0, 1, 2, 3, 4, 100, 200, 1000, 3000, INT_MAX, 65535, -1 };
-@@ -1617,6 +1620,15 @@ static const struct ctl_table kern_table[] = {
++#ifdef CONFIG_USER_NS
++extern int unprivileged_userns_clone;
++#endif
++
+ #ifdef CONFIG_PROC_SYSCTL
+ 
+ /**
+@@ -1617,6 +1621,15 @@ static const struct ctl_table kern_table[] = {
  		.mode		= 0644,
  		.proc_handler	= proc_dointvec,
  	},
@@ -229,19 +240,15 @@ index cb57da4..f7f1c25 100644
  	{
  		.procname	= "tainted",
 diff --git a/kernel/user_namespace.c b/kernel/user_namespace.c
-index aa0b2e4..d74d857 100644
+index aa0b2e4..222bb2b 100644
 --- a/kernel/user_namespace.c
 +++ b/kernel/user_namespace.c
-@@ -22,6 +22,13 @@
+@@ -22,6 +22,9 @@
  #include <linux/bsearch.h>
  #include <linux/sort.h>
  
 +/* sysctl */
-+#ifdef CONFIG_USER_NS_UNPRIVILEGED
 +int unprivileged_userns_clone = 1;
-+#else
-+int unprivileged_userns_clone;
-+#endif
 +
  static struct kmem_cache *user_ns_cachep __ro_after_init;
  static DEFINE_MUTEX(userns_state_mutex);
@@ -367,6 +374,158 @@ index 0000000..e3c28ff
 +MODULE_LICENSE("GPL");
 +MODULE_DESCRIPTION("Test the longest symbol length");
 +MODULE_AUTHOR("Sergio González Collado");
+diff --git a/net/bluetooth/hci_conn.c b/net/bluetooth/hci_conn.c
+index ae66fa0..a5cf428 100644
+--- a/net/bluetooth/hci_conn.c
++++ b/net/bluetooth/hci_conn.c
+@@ -2897,3 +2897,27 @@ int hci_abort_conn(struct hci_conn *conn, u8 reason)
+ 	 */
+ 	return hci_cmd_sync_run_once(hdev, abort_conn_sync, conn, NULL);
+ }
++
++u8 *hci_conn_key_enc_size(struct hci_conn *conn)
++{
++	if (conn->type == ACL_LINK) {
++		struct link_key *key;
++
++		key = hci_find_link_key(conn->hdev, &conn->dst);
++		if (!key)
++			return NULL;
++
++		return &key->pin_len;
++	} else if (conn->type == LE_LINK) {
++		struct smp_ltk *ltk;
++
++		ltk = hci_find_ltk(conn->hdev, &conn->dst, conn->dst_type,
++				   conn->role);
++		if (!ltk)
++			return NULL;
++
++		return &ltk->enc_size;
++	}
++
++	return NULL;
++}
+diff --git a/net/bluetooth/hci_event.c b/net/bluetooth/hci_event.c
+index ab940ec..a46929e 100644
+--- a/net/bluetooth/hci_event.c
++++ b/net/bluetooth/hci_event.c
+@@ -739,10 +739,17 @@ static u8 hci_cc_read_enc_key_size(struct hci_dev *hdev, void *data,
+ 			   handle);
+ 		conn->enc_key_size = 0;
+ 	} else {
++		u8 *key_enc_size = hci_conn_key_enc_size(conn);
++
+ 		conn->enc_key_size = rp->key_size;
+ 		status = 0;
+ 
+-		if (conn->enc_key_size < hdev->min_enc_key_size) {
++		/* Attempt to check if the key size is too small or if it has
++		 * been downgraded from the last time it was stored as part of
++		 * the link_key.
++		 */
++		if (conn->enc_key_size < hdev->min_enc_key_size ||
++		    (key_enc_size && conn->enc_key_size < *key_enc_size)) {
+ 			/* As slave role, the conn->state has been set to
+ 			 * BT_CONNECTED and l2cap conn req might not be received
+ 			 * yet, at this moment the l2cap layer almost does
+@@ -755,6 +762,10 @@ static u8 hci_cc_read_enc_key_size(struct hci_dev *hdev, void *data,
+ 			clear_bit(HCI_CONN_ENCRYPT, &conn->flags);
+ 			clear_bit(HCI_CONN_AES_CCM, &conn->flags);
+ 		}
++
++		/* Update the key encryption size with the connection one */
++		if (key_enc_size && *key_enc_size != conn->enc_key_size)
++			*key_enc_size = conn->enc_key_size;
+ 	}
+ 
+ 	hci_encrypt_cfm(conn, status);
+@@ -3062,6 +3073,34 @@ static void hci_inquiry_result_evt(struct hci_dev *hdev, void *edata,
+ 	hci_dev_unlock(hdev);
+ }
+ 
++static int hci_read_enc_key_size(struct hci_dev *hdev, struct hci_conn *conn)
++{
++	struct hci_cp_read_enc_key_size cp;
++	u8 *key_enc_size = hci_conn_key_enc_size(conn);
++
++	if (!read_key_size_capable(hdev)) {
++		conn->enc_key_size = HCI_LINK_KEY_SIZE;
++		return -EOPNOTSUPP;
++	}
++
++	bt_dev_dbg(hdev, "hcon %p", conn);
++
++	memset(&cp, 0, sizeof(cp));
++	cp.handle = cpu_to_le16(conn->handle);
++
++	/* If the key enc_size is already known, use it as conn->enc_key_size,
++	 * otherwise use hdev->min_enc_key_size so the likes of
++	 * l2cap_check_enc_key_size don't fail while waiting for
++	 * HCI_OP_READ_ENC_KEY_SIZE response.
++	 */
++	if (key_enc_size && *key_enc_size)
++		conn->enc_key_size = *key_enc_size;
++	else
++		conn->enc_key_size = hdev->min_enc_key_size;
++
++	return hci_send_cmd(hdev, HCI_OP_READ_ENC_KEY_SIZE, sizeof(cp), &cp);
++}
++
+ static void hci_conn_complete_evt(struct hci_dev *hdev, void *data,
+ 				  struct sk_buff *skb)
+ {
+@@ -3154,23 +3193,11 @@ static void hci_conn_complete_evt(struct hci_dev *hdev, void *data,
+ 		if (ev->encr_mode == 1 && !test_bit(HCI_CONN_ENCRYPT, &conn->flags) &&
+ 		    ev->link_type == ACL_LINK) {
+ 			struct link_key *key;
+-			struct hci_cp_read_enc_key_size cp;
+ 
+ 			key = hci_find_link_key(hdev, &ev->bdaddr);
+ 			if (key) {
+ 				set_bit(HCI_CONN_ENCRYPT, &conn->flags);
+-
+-				if (!read_key_size_capable(hdev)) {
+-					conn->enc_key_size = HCI_LINK_KEY_SIZE;
+-				} else {
+-					cp.handle = cpu_to_le16(conn->handle);
+-					if (hci_send_cmd(hdev, HCI_OP_READ_ENC_KEY_SIZE,
+-							 sizeof(cp), &cp)) {
+-						bt_dev_err(hdev, "sending read key size failed");
+-						conn->enc_key_size = HCI_LINK_KEY_SIZE;
+-					}
+-				}
+-
++				hci_read_enc_key_size(hdev, conn);
+ 				hci_encrypt_cfm(conn, ev->status);
+ 			}
+ 		}
+@@ -3609,24 +3636,8 @@ static void hci_encrypt_change_evt(struct hci_dev *hdev, void *data,
+ 
+ 	/* Try reading the encryption key size for encrypted ACL links */
+ 	if (!ev->status && ev->encrypt && conn->type == ACL_LINK) {
+-		struct hci_cp_read_enc_key_size cp;
+-
+-		/* Only send HCI_Read_Encryption_Key_Size if the
+-		 * controller really supports it. If it doesn't, assume
+-		 * the default size (16).
+-		 */
+-		if (!read_key_size_capable(hdev)) {
+-			conn->enc_key_size = HCI_LINK_KEY_SIZE;
+-			goto notify;
+-		}
+-
+-		cp.handle = cpu_to_le16(conn->handle);
+-		if (hci_send_cmd(hdev, HCI_OP_READ_ENC_KEY_SIZE,
+-				 sizeof(cp), &cp)) {
+-			bt_dev_err(hdev, "sending read key size failed");
+-			conn->enc_key_size = HCI_LINK_KEY_SIZE;
++		if (hci_read_enc_key_size(hdev, conn))
+ 			goto notify;
+-		}
+ 
+ 		goto unlock;
+ 	}
 diff --git a/security/lockdown/lockdown.c b/security/lockdown/lockdown.c
 index cf83afa..4f836e0 100644
 --- a/security/lockdown/lockdown.c

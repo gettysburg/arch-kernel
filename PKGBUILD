@@ -1,7 +1,7 @@
 # Maintainer: George Hartley (altoid) <hartley_george@proton.me>
 
 pkgbase=linux-custom
-pkgver=6.14.6
+pkgver=6.14.7
 pkgrel=1
 pkgdesc='Linux'
 url='https://github.com/archlinux/linux'
@@ -17,13 +17,6 @@ makedepends=(
   python
   tar
   xz
-
-  # htmldocs
-  graphviz
-  imagemagick
-  python-sphinx
-  python-yaml
-  texlive-latexextra
 )
 options=(
   !debug
@@ -40,14 +33,14 @@ validpgpkeys=(
   647F28654894E3BD457199BE38DBBDC86092693E  # Greg Kroah-Hartman
 )
 # https://www.kernel.org/pub/linux/kernel/v6.x/sha256sums.asc
-sha256sums=('21817f1998e2230f81f7e4f605fa6fdcb040e14fa27d99c27ddb16ce749797a9'
+sha256sums=('8112202bc26d086957a94d2109a6dcd4478c5ba18d0f0a5e1c5dfeea01f54972'
             'SKIP'
-            '06c905e750d0ee1bc184717ba4e2a0cfa284d85b69d93dff0e2052714e593176'
-            'daa0a6c2d1c164814721d8ad93f652bb1977cce4a8b6413f086499fac81c1a1d')
-b2sums=('dedcadc0b7506f620da3ac849446539e83d694f0955d5417e063b6680d53ef8993eeef40562ae8dae9249a21bea9746093f8873a360dd74f6b139fbafdd7b9ac'
+            '05eeae83080518759a4a8c9aed18439a503e71ff6c0f297e4071db86e2ba1f32'
+            '2d9e7f80f3125022ff273a1c9b4a20f77163e72964b4cda3cc7f5df2b39c6b89')
+b2sums=('1b0dc72ec9ff449d7245a0a457a8c1eea3ba63b42c5c179d9262cdbc2f04451c12359fadf74c7464b67115e9206730787b56a3dd539297e7e5c1ad2ae7e13632'
         'SKIP'
-        '0f2997ddbd73e8b913d105596697af80bc0a541192c032ad6e3d6ab2fef4425c03d5d3f5841b8005dee416c4ac71151350c8f0428b0327de76ca240052035f16'
-        'cd59cc8a2c412f897528f9803030988ebd502c1d944989110469e0c89840bbfd8153133ae26403b6fe4194be3865d4839180b87cbee6f933d87ab99b07db7d16')
+        '4bce6968dd8e9998aa5cdcf8f77a04f4fae6489ed628f7631cdd215d978863889c3d2b02289742db0f25eac4883a1559e2d6d2320134bb915e5fb7c50ab17cb6'
+        '3c911c3d6ee967c087a02b1fe4950bde565ec9556d842470da2e363bca387f5ef0dcb43d365bcb6f749548ec94d9f579d3c8b57834eca6cb76bd7bcbb155fd88')
 
 export KBUILD_BUILD_HOST=archlinux
 export KBUILD_BUILD_USER=$pkgbase
@@ -72,8 +65,10 @@ prepare() {
 
   echo "Setting config..."
   cp ../config .config
+
   make menuconfig
   make prepare
+
   diff -u ../config .config || :
 
   make -s kernelrelease > version
@@ -120,7 +115,7 @@ _package() {
 
   echo "Installing modules..."
   ZSTD_CLEVEL=19 make INSTALL_MOD_PATH="$pkgdir/usr" INSTALL_MOD_STRIP=1 \
-    DEPMOD=/doesnt/exist modules_install  # Suppress depmod
+    DEPMOD=/bin/true modules_install  # Suppress depmod
 
   # remove build link
   rm "$modulesdir"/build
