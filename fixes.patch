@@ -20,7 +20,7 @@
  	  This value can be used to select the number of bits to use to
 --- a/arch/x86/kernel/cpu/bugs.c
 +++ b/arch/x86/kernel/cpu/bugs.c
-@@ -2099,7 +2099,6 @@ static void update_mds_branch_idle(void)
+@@ -2070,7 +2070,6 @@ static void update_mds_branch_idle(void)
  	}
  }
  
@@ -28,9 +28,9 @@
  #define TAA_MSG_SMT "TAA CPU bug present and SMT on, data leak possible. See https://www.kernel.org/doc/html/latest/admin-guide/hw-vuln/tsx_async_abort.html for more details.\n"
  #define MMIO_MSG_SMT "MMIO Stale Data CPU bug present and SMT on, data leak possible. See https://www.kernel.org/doc/html/latest/admin-guide/hw-vuln/processor_mmio_stale_data.html for more details.\n"
  
-@@ -2127,8 +2126,6 @@ void cpu_bugs_smt_update(void)
- 	switch (mds_mitigation) {
+@@ -2099,8 +2098,6 @@ void cpu_bugs_smt_update(void)
  	case MDS_MITIGATION_FULL:
+ 	case MDS_MITIGATION_AUTO:
  	case MDS_MITIGATION_VMWERV:
 -		if (sched_smt_active() && !boot_cpu_has(X86_BUG_MSBDS_ONLY))
 -			pr_warn_once(MDS_MSG_SMT);
@@ -69,25 +69,6 @@
  		return -EPERM;
  	}
  
---- a/arch/x86/tools/insn_decoder_test.c
-+++ b/arch/x86/tools/insn_decoder_test.c
-@@ -10,6 +10,7 @@
- #include <assert.h>
- #include <unistd.h>
- #include <stdarg.h>
-+#include <linux/kallsyms.h>
- 
- #define unlikely(cond) (cond)
- 
-@@ -106,7 +107,7 @@ static void parse_args(int argc, char **argv)
- 	}
- }
- 
--#define BUFSIZE 256
-+#define BUFSIZE (256 + KSYM_NAME_LEN)
- 
- int main(int argc, char **argv)
- {
 --- a/drivers/firmware/sysfb.c
 +++ b/drivers/firmware/sysfb.c
 @@ -35,6 +35,22 @@
@@ -124,7 +105,7 @@
  			goto put_device;
 --- a/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.c
 +++ b/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.c
-@@ -670,21 +670,15 @@ static void dm_crtc_high_irq(void *interrupt_params)
+@@ -675,21 +675,15 @@ static void dm_crtc_high_irq(void *interrupt_params)
  	spin_lock_irqsave(&adev_to_drm(adev)->event_lock, flags);
  
  	if (acrtc->dm_irq_params.stream &&
@@ -151,16 +132,6 @@
  	}
  
  	/*
---- a/include/net/bluetooth/hci_core.h
-+++ b/include/net/bluetooth/hci_core.h
-@@ -1778,6 +1778,7 @@ struct hci_conn_params *hci_pend_le_action_lookup(struct list_head *list,
- void hci_uuids_clear(struct hci_dev *hdev);
- 
- void hci_link_keys_clear(struct hci_dev *hdev);
-+u8 *hci_conn_key_enc_size(struct hci_conn *conn);
- struct link_key *hci_find_link_key(struct hci_dev *hdev, bdaddr_t *bdaddr);
- struct link_key *hci_add_link_key(struct hci_dev *hdev, struct hci_conn *conn,
- 				  bdaddr_t *bdaddr, u8 *val, u8 type,
 --- a/kernel/fork.c
 +++ b/kernel/fork.c
 @@ -119,6 +119,12 @@
@@ -176,7 +147,7 @@
  /*
   * Minimum number of threads to boot the kernel
   */
-@@ -2172,6 +2178,10 @@ __latent_entropy struct task_struct *copy_process(
+@@ -2194,6 +2200,10 @@ __latent_entropy struct task_struct *copy_process(
  	if ((clone_flags & (CLONE_NEWUSER|CLONE_FS)) == (CLONE_NEWUSER|CLONE_FS))
  		return ERR_PTR(-EINVAL);
  
@@ -187,7 +158,7 @@
  	/*
  	 * Thread groups must share signals as well, and detached threads
  	 * can only be started up within the thread group.
-@@ -3325,6 +3335,12 @@ int ksys_unshare(unsigned long unshare_flags)
+@@ -3354,6 +3364,12 @@ int ksys_unshare(unsigned long unshare_flags)
  	if (unshare_flags & CLONE_NEWNS)
  		unshare_flags |= CLONE_FS;
  
@@ -202,7 +173,7 @@
  		goto bad_unshare_out;
 --- a/kernel/sysctl.c
 +++ b/kernel/sysctl.c
-@@ -100,6 +100,10 @@ static const int six_hundred_forty_kb = 640 * 1024;
+@@ -84,6 +84,10 @@ EXPORT_SYMBOL_GPL(sysctl_long_vals);
  static const int ngroups_max = NGROUPS_MAX;
  static const int cap_last_cap = CAP_LAST_CAP;
  
@@ -213,7 +184,7 @@
  #ifdef CONFIG_PROC_SYSCTL
  
  /**
-@@ -1617,6 +1621,15 @@ static const struct ctl_table kern_table[] = {
+@@ -1595,6 +1599,15 @@ static const struct ctl_table kern_table[] = {
  		.mode		= 0644,
  		.proc_handler	= proc_dointvec,
  	},
@@ -241,270 +212,3 @@
  static struct kmem_cache *user_ns_cachep __ro_after_init;
  static DEFINE_MUTEX(userns_state_mutex);
  
---- a/lib/Kconfig.debug
-+++ b/lib/Kconfig.debug
-@@ -2838,6 +2838,15 @@ config FORTIFY_KUNIT_TEST
- 	  by the str*() and mem*() family of functions. For testing runtime
- 	  traps of FORTIFY_SOURCE, see LKDTM's "FORTIFY_*" tests.
- 
-+config LONGEST_SYM_KUNIT_TEST
-+	tristate "Test the longest symbol possible" if !KUNIT_ALL_TESTS
-+	depends on KUNIT && KPROBES
-+	default KUNIT_ALL_TESTS
-+	help
-+	  Tests the longest symbol possible
-+
-+	  If unsure, say N.
-+
- config HW_BREAKPOINT_KUNIT_TEST
- 	bool "Test hw_breakpoint constraints accounting" if !KUNIT_ALL_TESTS
- 	depends on HAVE_HW_BREAKPOINT
---- a/lib/Makefile
-+++ b/lib/Makefile
-@@ -398,6 +398,8 @@ obj-$(CONFIG_FORTIFY_KUNIT_TEST) += fortify_kunit.o
- obj-$(CONFIG_CRC_KUNIT_TEST) += crc_kunit.o
- obj-$(CONFIG_SIPHASH_KUNIT_TEST) += siphash_kunit.o
- obj-$(CONFIG_USERCOPY_KUNIT_TEST) += usercopy_kunit.o
-+obj-$(CONFIG_LONGEST_SYM_KUNIT_TEST) += longest_symbol_kunit.o
-+CFLAGS_longest_symbol_kunit.o += $(call cc-disable-warning, missing-prototypes)
- 
- obj-$(CONFIG_GENERIC_LIB_DEVMEM_IS_ALLOWED) += devmem_is_allowed.o
- 
---- /dev/null
-+++ b/lib/longest_symbol_kunit.c
-@@ -0,0 +1,82 @@
-+// SPDX-License-Identifier: GPL-2.0
-+/*
-+ * Test the longest symbol length. Execute with:
-+ *  ./tools/testing/kunit/kunit.py run longest-symbol
-+ *  --arch=x86_64 --kconfig_add CONFIG_KPROBES=y --kconfig_add CONFIG_MODULES=y
-+ *  --kconfig_add CONFIG_RETPOLINE=n --kconfig_add CONFIG_CFI_CLANG=n
-+ *  --kconfig_add CONFIG_MITIGATION_RETPOLINE=n
-+ */
-+
-+#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
-+
-+#include <kunit/test.h>
-+#include <linux/stringify.h>
-+#include <linux/kprobes.h>
-+#include <linux/kallsyms.h>
-+
-+#define DI(name) s##name##name
-+#define DDI(name) DI(n##name##name)
-+#define DDDI(name) DDI(n##name##name)
-+#define DDDDI(name) DDDI(n##name##name)
-+#define DDDDDI(name) DDDDI(n##name##name)
-+
-+/*Generate a symbol whose name length is 511 */
-+#define LONGEST_SYM_NAME  DDDDDI(g1h2i3j4k5l6m7n)
-+
-+#define RETURN_LONGEST_SYM 0xAAAAA
-+
-+noinline int LONGEST_SYM_NAME(void);
-+noinline int LONGEST_SYM_NAME(void)
-+{
-+	return RETURN_LONGEST_SYM;
-+}
-+
-+_Static_assert(sizeof(__stringify(LONGEST_SYM_NAME)) == KSYM_NAME_LEN,
-+"Incorrect symbol length found. Expected KSYM_NAME_LEN: "
-+__stringify(KSYM_NAME_LEN) ", but found: "
-+__stringify(sizeof(LONGEST_SYM_NAME)));
-+
-+static void test_longest_symbol(struct kunit *test)
-+{
-+	KUNIT_EXPECT_EQ(test, RETURN_LONGEST_SYM, LONGEST_SYM_NAME());
-+};
-+
-+static void test_longest_symbol_kallsyms(struct kunit *test)
-+{
-+	unsigned long (*kallsyms_lookup_name)(const char *name);
-+	static int (*longest_sym)(void);
-+
-+	struct kprobe kp = {
-+		.symbol_name = "kallsyms_lookup_name",
-+	};
-+
-+	if (register_kprobe(&kp) < 0) {
-+		pr_info("%s: kprobe not registered", __func__);
-+		KUNIT_FAIL(test, "test_longest_symbol kallsyms: kprobe not registered\n");
-+		return;
-+	}
-+
-+	kunit_warn(test, "test_longest_symbol kallsyms: kprobe registered\n");
-+	kallsyms_lookup_name = (unsigned long (*)(const char *name))kp.addr;
-+	unregister_kprobe(&kp);
-+
-+	longest_sym =
-+		(void *) kallsyms_lookup_name(__stringify(LONGEST_SYM_NAME));
-+	KUNIT_EXPECT_EQ(test, RETURN_LONGEST_SYM, longest_sym());
-+};
-+
-+static struct kunit_case longest_symbol_test_cases[] = {
-+	KUNIT_CASE(test_longest_symbol),
-+	KUNIT_CASE(test_longest_symbol_kallsyms),
-+	{}
-+};
-+
-+static struct kunit_suite longest_symbol_test_suite = {
-+	.name = "longest-symbol",
-+	.test_cases = longest_symbol_test_cases,
-+};
-+kunit_test_suite(longest_symbol_test_suite);
-+
-+MODULE_LICENSE("GPL");
-+MODULE_DESCRIPTION("Test the longest symbol length");
-+MODULE_AUTHOR("Sergio González Collado");
---- a/net/bluetooth/hci_conn.c
-+++ b/net/bluetooth/hci_conn.c
-@@ -2897,3 +2897,27 @@ int hci_abort_conn(struct hci_conn *conn, u8 reason)
- 	 */
- 	return hci_cmd_sync_run_once(hdev, abort_conn_sync, conn, NULL);
- }
-+
-+u8 *hci_conn_key_enc_size(struct hci_conn *conn)
-+{
-+	if (conn->type == ACL_LINK) {
-+		struct link_key *key;
-+
-+		key = hci_find_link_key(conn->hdev, &conn->dst);
-+		if (!key)
-+			return NULL;
-+
-+		return &key->pin_len;
-+	} else if (conn->type == LE_LINK) {
-+		struct smp_ltk *ltk;
-+
-+		ltk = hci_find_ltk(conn->hdev, &conn->dst, conn->dst_type,
-+				   conn->role);
-+		if (!ltk)
-+			return NULL;
-+
-+		return &ltk->enc_size;
-+	}
-+
-+	return NULL;
-+}
---- a/net/bluetooth/hci_event.c
-+++ b/net/bluetooth/hci_event.c
-@@ -739,22 +739,33 @@ static u8 hci_cc_read_enc_key_size(struct hci_dev *hdev, void *data,
- 			   handle);
- 		conn->enc_key_size = 0;
- 	} else {
-+		u8 *key_enc_size = hci_conn_key_enc_size(conn);
-+
- 		conn->enc_key_size = rp->key_size;
- 		status = 0;
- 
--		if (conn->enc_key_size < hdev->min_enc_key_size) {
-+		/* Attempt to check if the key size is too small or if it has
-+		 * been downgraded from the last time it was stored as part of
-+		 * the link_key.
-+		 */
-+		if (conn->enc_key_size < hdev->min_enc_key_size ||
-+		    (key_enc_size && conn->enc_key_size < *key_enc_size)) {
- 			/* As slave role, the conn->state has been set to
- 			 * BT_CONNECTED and l2cap conn req might not be received
- 			 * yet, at this moment the l2cap layer almost does
- 			 * nothing with the non-zero status.
- 			 * So we also clear encrypt related bits, and then the
- 			 * handler of l2cap conn req will get the right secure
- 			 * state at a later time.
- 			 */
- 			status = HCI_ERROR_AUTH_FAILURE;
- 			clear_bit(HCI_CONN_ENCRYPT, &conn->flags);
- 			clear_bit(HCI_CONN_AES_CCM, &conn->flags);
- 		}
-+
-+		/* Update the key encryption size with the connection one */
-+		if (key_enc_size && *key_enc_size != conn->enc_key_size)
-+			*key_enc_size = conn->enc_key_size;
- 	}
- 
- 	hci_encrypt_cfm(conn, status);
-@@ -3065,6 +3076,34 @@ static void hci_inquiry_result_evt(struct hci_dev *hdev, void *edata,
- 	hci_dev_unlock(hdev);
- }
- 
-+static int hci_read_enc_key_size(struct hci_dev *hdev, struct hci_conn *conn)
-+{
-+	struct hci_cp_read_enc_key_size cp;
-+	u8 *key_enc_size = hci_conn_key_enc_size(conn);
-+
-+	if (!read_key_size_capable(hdev)) {
-+		conn->enc_key_size = HCI_LINK_KEY_SIZE;
-+		return -EOPNOTSUPP;
-+	}
-+
-+	bt_dev_dbg(hdev, "hcon %p", conn);
-+
-+	memset(&cp, 0, sizeof(cp));
-+	cp.handle = cpu_to_le16(conn->handle);
-+
-+	/* If the key enc_size is already known, use it as conn->enc_key_size,
-+	 * otherwise use hdev->min_enc_key_size so the likes of
-+	 * l2cap_check_enc_key_size don't fail while waiting for
-+	 * HCI_OP_READ_ENC_KEY_SIZE response.
-+	 */
-+	if (key_enc_size && *key_enc_size)
-+		conn->enc_key_size = *key_enc_size;
-+	else
-+		conn->enc_key_size = hdev->min_enc_key_size;
-+
-+	return hci_send_cmd(hdev, HCI_OP_READ_ENC_KEY_SIZE, sizeof(cp), &cp);
-+}
-+
- static void hci_conn_complete_evt(struct hci_dev *hdev, void *data,
- 				  struct sk_buff *skb)
- {
-@@ -3157,23 +3196,11 @@ static void hci_conn_complete_evt(struct hci_dev *hdev, void *data,
- 		if (ev->encr_mode == 1 && !test_bit(HCI_CONN_ENCRYPT, &conn->flags) &&
- 		    ev->link_type == ACL_LINK) {
- 			struct link_key *key;
--			struct hci_cp_read_enc_key_size cp;
- 
- 			key = hci_find_link_key(hdev, &ev->bdaddr);
- 			if (key) {
- 				set_bit(HCI_CONN_ENCRYPT, &conn->flags);
--
--				if (!read_key_size_capable(hdev)) {
--					conn->enc_key_size = HCI_LINK_KEY_SIZE;
--				} else {
--					cp.handle = cpu_to_le16(conn->handle);
--					if (hci_send_cmd(hdev, HCI_OP_READ_ENC_KEY_SIZE,
--							 sizeof(cp), &cp)) {
--						bt_dev_err(hdev, "sending read key size failed");
--						conn->enc_key_size = HCI_LINK_KEY_SIZE;
--					}
--				}
--
-+				hci_read_enc_key_size(hdev, conn);
- 				hci_encrypt_cfm(conn, ev->status);
- 			}
- 		}
-@@ -3612,24 +3639,8 @@ static void hci_encrypt_change_evt(struct hci_dev *hdev, void *data,
- 
- 	/* Try reading the encryption key size for encrypted ACL links */
- 	if (!ev->status && ev->encrypt && conn->type == ACL_LINK) {
--		struct hci_cp_read_enc_key_size cp;
--
--		/* Only send HCI_Read_Encryption_Key_Size if the
--		 * controller really supports it. If it doesn't, assume
--		 * the default size (16).
--		 */
--		if (!read_key_size_capable(hdev)) {
--			conn->enc_key_size = HCI_LINK_KEY_SIZE;
-+		if (hci_read_enc_key_size(hdev, conn))
- 			goto notify;
--		}
--
--		cp.handle = cpu_to_le16(conn->handle);
--		if (hci_send_cmd(hdev, HCI_OP_READ_ENC_KEY_SIZE,
--				 sizeof(cp), &cp)) {
--			bt_dev_err(hdev, "sending read key size failed");
--			conn->enc_key_size = HCI_LINK_KEY_SIZE;
--			goto notify;
--		}
- 
- 		goto unlock;
- 	}
