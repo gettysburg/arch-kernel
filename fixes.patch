@@ -69,6 +69,40 @@
  		return -EPERM;
  	}
  
+--- a/scripts/gcc-plugins/randomize_layout_plugin.c
++++ b/scripts/gcc-plugins/randomize_layout_plugin.c
+@@ -344,29 +344,13 @@ static int relayout_struct(tree type)
+ 
+ 	shuffle(type, (tree *)newtree, shuffle_length);
+ 
+-	/*
+-	 * set up a bogus anonymous struct field designed to error out on unnamed struct initializers
+-	 * as gcc provides no other way to detect such code
+-	 */
+-	list = make_node(FIELD_DECL);
+-	TREE_CHAIN(list) = newtree[0];
+-	TREE_TYPE(list) = void_type_node;
+-	DECL_SIZE(list) = bitsize_zero_node;
+-	DECL_NONADDRESSABLE_P(list) = 1;
+-	DECL_FIELD_BIT_OFFSET(list) = bitsize_zero_node;
+-	DECL_SIZE_UNIT(list) = size_zero_node;
+-	DECL_FIELD_OFFSET(list) = size_zero_node;
+-	DECL_CONTEXT(list) = type;
+-	// to satisfy the constify plugin
+-	TREE_READONLY(list) = 1;
+-
+ 	for (i = 0; i < num_fields - 1; i++)
+ 		TREE_CHAIN(newtree[i]) = newtree[i+1];
+ 	TREE_CHAIN(newtree[num_fields - 1]) = NULL_TREE;
+ 
+ 	main_variant = TYPE_MAIN_VARIANT(type);
+ 	for (variant = main_variant; variant; variant = TYPE_NEXT_VARIANT(variant)) {
+-		TYPE_FIELDS(variant) = list;
++		TYPE_FIELDS(variant) = newtree[0];
+ 		TYPE_ATTRIBUTES(variant) = copy_list(TYPE_ATTRIBUTES(variant));
+ 		TYPE_ATTRIBUTES(variant) = tree_cons(get_identifier("randomize_performed"), NULL_TREE, TYPE_ATTRIBUTES(variant));
+ 		TYPE_ATTRIBUTES(variant) = tree_cons(get_identifier("designated_init"), NULL_TREE, TYPE_ATTRIBUTES(variant));
+ 
 --- a/drivers/firmware/sysfb.c
 +++ b/drivers/firmware/sysfb.c
 @@ -35,6 +35,22 @@
@@ -103,35 +137,6 @@
  		pd = sysfb_create_simplefb(si, &mode, parent);
  		if (!IS_ERR(pd))
  			goto put_device;
---- a/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.c
-+++ b/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.c
-@@ -675,21 +675,15 @@ static void dm_crtc_high_irq(void *interrupt_params)
- 	spin_lock_irqsave(&adev_to_drm(adev)->event_lock, flags);
- 
- 	if (acrtc->dm_irq_params.stream &&
--		acrtc->dm_irq_params.vrr_params.supported) {
--		bool replay_en = acrtc->dm_irq_params.stream->link->replay_settings.replay_feature_enabled;
--		bool psr_en = acrtc->dm_irq_params.stream->link->psr_settings.psr_feature_enabled;
--		bool fs_active_var_en = acrtc->dm_irq_params.freesync_config.state == VRR_STATE_ACTIVE_VARIABLE;
--
-+	    acrtc->dm_irq_params.vrr_params.supported &&
-+	    acrtc->dm_irq_params.freesync_config.state ==
-+		    VRR_STATE_ACTIVE_VARIABLE) {
- 		mod_freesync_handle_v_update(adev->dm.freesync_module,
- 					     acrtc->dm_irq_params.stream,
- 					     &acrtc->dm_irq_params.vrr_params);
- 
--		/* update vmin_vmax only if freesync is enabled, or only if PSR and REPLAY are disabled */
--		if (fs_active_var_en || (!fs_active_var_en && !replay_en && !psr_en)) {
--			dc_stream_adjust_vmin_vmax(adev->dm.dc,
--					acrtc->dm_irq_params.stream,
--					&acrtc->dm_irq_params.vrr_params.adjust);
--		}
-+		dc_stream_adjust_vmin_vmax(adev->dm.dc, acrtc->dm_irq_params.stream,
-+					   &acrtc->dm_irq_params.vrr_params.adjust);
- 	}
- 
- 	/*
 --- a/kernel/fork.c
 +++ b/kernel/fork.c
 @@ -119,6 +119,12 @@
