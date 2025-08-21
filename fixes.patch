@@ -20,7 +20,7 @@
  	  This value can be used to select the number of bits to use to
 --- a/arch/x86/kernel/cpu/bugs.c
 +++ b/arch/x86/kernel/cpu/bugs.c
-@@ -2348,7 +2348,6 @@ static void update_mds_branch_idle(void)
+@@ -2356,7 +2356,6 @@ static void update_mds_branch_idle(void)
  	}
  }
  
@@ -28,7 +28,7 @@
  #define TAA_MSG_SMT "TAA CPU bug present and SMT on, data leak possible. See https://www.kernel.org/doc/html/latest/admin-guide/hw-vuln/tsx_async_abort.html for more details.\n"
  #define MMIO_MSG_SMT "MMIO Stale Data CPU bug present and SMT on, data leak possible. See https://www.kernel.org/doc/html/latest/admin-guide/hw-vuln/processor_mmio_stale_data.html for more details.\n"
  
-@@ -2377,8 +2376,6 @@ void cpu_bugs_smt_update(void)
+@@ -2385,8 +2384,6 @@ void cpu_bugs_smt_update(void)
  	case MDS_MITIGATION_FULL:
  	case MDS_MITIGATION_AUTO:
  	case MDS_MITIGATION_VMWERV:
@@ -69,40 +69,6 @@
  		return -EPERM;
  	}
  
---- a/drivers/firmware/sysfb.c
-+++ b/drivers/firmware/sysfb.c
-@@ -35,6 +35,22 @@
- #include <linux/screen_info.h>
- #include <linux/sysfb.h>
- 
-+static int skip_simpledrm;
-+
-+static int __init simpledrm_disable(char *opt)
-+{
-+	if (!opt)
-+                return -EINVAL;
-+
-+	get_option(&opt, &skip_simpledrm);
-+
-+	if (skip_simpledrm)
-+		pr_info("The simpledrm driver will not be probed\n");
-+
-+	return 0;
-+}
-+early_param("nvidia-drm.modeset", simpledrm_disable);
-+
- static struct platform_device *pd;
- static DEFINE_MUTEX(disable_lock);
- static bool disabled;
-@@ -165,7 +181,7 @@ static __init int sysfb_init(void)
- 
- 	/* try to create a simple-framebuffer device */
- 	compatible = sysfb_parse_mode(si, &mode);
--	if (compatible) {
-+	if (compatible && !skip_simpledrm) {
- 		pd = sysfb_create_simplefb(si, &mode, parent);
- 		if (!IS_ERR(pd))
- 			goto put_device;
 --- a/fs/btrfs/tree-log.c
 +++ b/fs/btrfs/tree-log.c
 @@ -321,8 +321,7 @@ struct walk_control {
