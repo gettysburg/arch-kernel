@@ -20,15 +20,15 @@
  	  This value can be used to select the number of bits to use to
 --- a/arch/x86/kernel/cpu/bugs.c
 +++ b/arch/x86/kernel/cpu/bugs.c
-@@ -2355,7 +2355,6 @@ static void update_mds_branch_idle(void)
- 	}
- }
+@@ -3143,7 +3143,6 @@ static void __init vmscape_apply_mitigation(void)
+ #undef pr_fmt
+ #define pr_fmt(fmt) fmt
  
 -#define MDS_MSG_SMT "MDS CPU bug present and SMT on, data leak possible. See https://www.kernel.org/doc/html/latest/admin-guide/hw-vuln/mds.html for more details.\n"
  #define TAA_MSG_SMT "TAA CPU bug present and SMT on, data leak possible. See https://www.kernel.org/doc/html/latest/admin-guide/hw-vuln/tsx_async_abort.html for more details.\n"
  #define MMIO_MSG_SMT "MMIO Stale Data CPU bug present and SMT on, data leak possible. See https://www.kernel.org/doc/html/latest/admin-guide/hw-vuln/processor_mmio_stale_data.html for more details.\n"
- 
-@@ -2384,8 +2383,6 @@ void cpu_bugs_smt_update(void)
+ #define VMSCAPE_MSG_SMT "VMSCAPE: SMT on, STIBP is required for full protection. See https://www.kernel.org/doc/html/latest/admin-guide/hw-vuln/vmscape.html for more details.\n"
+@@ -3173,8 +3172,6 @@ void cpu_bugs_smt_update(void)
  	case MDS_MITIGATION_FULL:
  	case MDS_MITIGATION_AUTO:
  	case MDS_MITIGATION_VMWERV:
