@@ -1,6 +1,6 @@
 --- a/arch/Kconfig
 +++ b/arch/Kconfig
-@@ -1137,7 +1137,7 @@ config ARCH_MMAP_RND_BITS
+@@ -1153,7 +1153,7 @@ config ARCH_MMAP_RND_BITS
  	int "Number of bits to use for ASLR of mmap base address" if EXPERT
  	range ARCH_MMAP_RND_BITS_MIN ARCH_MMAP_RND_BITS_MAX
  	default ARCH_MMAP_RND_BITS_DEFAULT if ARCH_MMAP_RND_BITS_DEFAULT
@@ -9,7 +9,7 @@
  	depends on HAVE_ARCH_MMAP_RND_BITS
  	help
  	  This value can be used to select the number of bits to use to
-@@ -1171,7 +1171,7 @@ config ARCH_MMAP_RND_COMPAT_BITS
+@@ -1187,7 +1187,7 @@ config ARCH_MMAP_RND_COMPAT_BITS
  	int "Number of bits to use for ASLR of mmap base address for compatible applications" if EXPERT
  	range ARCH_MMAP_RND_COMPAT_BITS_MIN ARCH_MMAP_RND_COMPAT_BITS_MAX
  	default ARCH_MMAP_RND_COMPAT_BITS_DEFAULT if ARCH_MMAP_RND_COMPAT_BITS_DEFAULT
@@ -20,7 +20,7 @@
  	  This value can be used to select the number of bits to use to
 --- a/arch/x86/kernel/cpu/bugs.c
 +++ b/arch/x86/kernel/cpu/bugs.c
-@@ -3143,7 +3143,6 @@ static void __init vmscape_apply_mitigation(void)
+@@ -3336,7 +3336,6 @@ static void __init vmscape_apply_mitigation(void)
  #undef pr_fmt
  #define pr_fmt(fmt) fmt
  
@@ -28,7 +28,7 @@
  #define TAA_MSG_SMT "TAA CPU bug present and SMT on, data leak possible. See https://www.kernel.org/doc/html/latest/admin-guide/hw-vuln/tsx_async_abort.html for more details.\n"
  #define MMIO_MSG_SMT "MMIO Stale Data CPU bug present and SMT on, data leak possible. See https://www.kernel.org/doc/html/latest/admin-guide/hw-vuln/processor_mmio_stale_data.html for more details.\n"
  #define VMSCAPE_MSG_SMT "VMSCAPE: SMT on, STIBP is required for full protection. See https://www.kernel.org/doc/html/latest/admin-guide/hw-vuln/vmscape.html for more details.\n"
-@@ -3173,8 +3172,6 @@ void cpu_bugs_smt_update(void)
+@@ -3366,8 +3365,6 @@ void cpu_bugs_smt_update(void)
  	case MDS_MITIGATION_FULL:
  	case MDS_MITIGATION_AUTO:
  	case MDS_MITIGATION_VMWERV:
@@ -71,7 +71,26 @@
  
 --- a/drivers/gpu/drm/i915/display/intel_psr.c
 +++ b/drivers/gpu/drm/i915/display/intel_psr.c
-@@ -3359,12 +3359,18 @@ static void _psr_flush_handle(struct intel_dp *intel_dp)
+@@ -3364,30 +3364,38 @@ static void _psr_flush_handle(struct intel_dp *intel_dp)
+ 	struct intel_display *display = to_intel_display(intel_dp);
+ 
+ 	if (DISPLAY_VER(display) < 20 && intel_dp->psr.psr2_sel_fetch_enabled) {
++		/* Selective fetch prior LNL */
+ 		if (intel_dp->psr.psr2_sel_fetch_cff_enabled) {
+ 			/* can we turn CFF off? */
+ 			if (intel_dp->psr.busy_frontbuffer_bits == 0)
+ 				intel_dp->psr.psr2_sel_fetch_cff_enabled = false;
+ 		}
+ 
+ 		/*
+ 		 * Still keep cff bit enabled as we don't have proper SU
+ 		 * configuration in case update is sent for any reason after
+ 		 * sff bit gets cleared by the HW on next vblank.
+ 		 *
+ 		 * NOTE: Setting cff bit is not needed for LunarLake onwards as
+ 		 * we have own register for SFF bit and we are not overwriting
+ 		 * existing SU configuration
+ 		 */
  		intel_psr_configure_full_frame_update(intel_dp);
  
  		intel_psr_force_update(intel_dp);
@@ -79,17 +98,18 @@
 +		/*
 +		 * PSR1 on all platforms
 +		 * PSR2 HW tracking
-+		 * PR FU
++		 * Panel Replay Full frame update
 +		 */
 +		intel_psr_force_update(intel_dp);
  	} else {
++		/* Selective update LNL onwards */
  		intel_psr_exit(intel_dp);
  	}
  
 -	if ((!intel_dp->psr.psr2_sel_fetch_enabled || DISPLAY_VER(display) >= 20) &&
 -	    !intel_dp->psr.busy_frontbuffer_bits)
 +	if (!intel_dp->psr.active && !intel_dp->psr.busy_frontbuffer_bits)
- 		queue_work(dev_priv->unordered_wq, &intel_dp->psr.work);
+ 		queue_work(display->wq.unordered, &intel_dp->psr.work);
  }
  
 --- a/drivers/watchdog/intel_oc_wdt.c
@@ -153,60 +173,46 @@
  
 --- a/kernel/fork.c
 +++ b/kernel/fork.c
-@@ -122,6 +122,12 @@
+@@ -123,6 +123,12 @@
  
  #include <kunit/visibility.h>
  
 +#ifdef CONFIG_USER_NS
-+extern int unprivileged_userns_clone;
++static int unprivileged_userns_clone = 1;
 +#else
-+#define unprivileged_userns_clone 0
++#define unprivileged_userns_clone 1
 +#endif
 +
  /*
   * Minimum number of threads to boot the kernel
   */
-@@ -1933,6 +1939,10 @@ __latent_entropy struct task_struct *copy_process(
- 	if ((clone_flags & (CLONE_NEWUSER|CLONE_FS)) == (CLONE_NEWUSER|CLONE_FS))
- 		return ERR_PTR(-EINVAL);
+@@ -1982,6 +1988,11 @@ __latent_entropy struct task_struct *copy_process(
+ 			return ERR_PTR(-EINVAL);
+ 	}
  
-+	if ((clone_flags & CLONE_NEWUSER) && !unprivileged_userns_clone)
++	if ((clone_flags & CLONE_NEWUSER) && !unprivileged_userns_clone) {
 +		if (!capable(CAP_SYS_ADMIN))
 +			return ERR_PTR(-EPERM);
-+
- 	/*
- 	 * Thread groups must share signals as well, and detached threads
- 	 * can only be started up within the thread group.
-@@ -3099,6 +3109,12 @@ int ksys_unshare(unsigned long unshare_flags)
- 	if (unshare_flags & CLONE_NEWNS)
- 		unshare_flags |= CLONE_FS;
- 
-+	if ((unshare_flags & CLONE_NEWUSER) && !unprivileged_userns_clone) {
-+		err = -EPERM;
-+		if (!capable(CAP_SYS_ADMIN))
-+			goto bad_unshare_out;
 +	}
 +
- 	err = check_unshare_flags(unshare_flags);
- 	if (err)
- 		goto bad_unshare_out;
---- a/kernel/sysctl.c
-+++ b/kernel/sysctl.c
-@@ -77,6 +77,10 @@ EXPORT_SYMBOL_GPL(sysctl_long_vals);
- static const int ngroups_max = NGROUPS_MAX;
- static const int cap_last_cap = CAP_LAST_CAP;
+ 	/*
+ 	 * Force any signals received before this point to be delivered
+ 	 * before the fork happens.  Collect up signals sent to multiple
+@@ -3023,6 +3034,10 @@ static int check_unshare_flags(unsigned long unshare_flags)
+ 		if (!current_is_single_threaded())
+ 			return -EINVAL;
+ 	}
++	if ((unshare_flags & CLONE_NEWUSER) && !unprivileged_userns_clone) {
++		if (!capable(CAP_SYS_ADMIN))
++			return -EPERM;
++	}
  
-+#ifdef CONFIG_USER_NS
-+extern int unprivileged_userns_clone;
-+#endif
-+
- #ifdef CONFIG_PROC_SYSCTL
- 
- /**
-@@ -1581,6 +1585,15 @@ int proc_do_static_key(const struct ctl_table *table, int write,
+ 	return 0;
  }
- 
- static const struct ctl_table kern_table[] = {
+@@ -3253,6 +3268,15 @@ static const struct ctl_table fork_sysctl_table[] = {
+ 		.mode		= 0644,
+ 		.proc_handler	= sysctl_max_threads,
+ 	},
 +#ifdef CONFIG_USER_NS
 +	{
 +		.procname	= "unprivileged_userns_clone",
@@ -216,18 +222,6 @@
 +		.proc_handler	= proc_dointvec,
 +	},
 +#endif
- #ifdef CONFIG_PROC_SYSCTL
- 	{
- 		.procname	= "tainted",
---- a/kernel/user_namespace.c
-+++ b/kernel/user_namespace.c
-@@ -22,6 +22,9 @@
- #include <linux/bsearch.h>
- #include <linux/sort.h>
+ };
  
-+/* sysctl */
-+int unprivileged_userns_clone = 1;
-+
- static struct kmem_cache *user_ns_cachep __ro_after_init;
- static DEFINE_MUTEX(userns_state_mutex);
- 
+ static int __init init_fork_sysctl(void)
