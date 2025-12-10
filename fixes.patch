@@ -1,6 +1,6 @@
 --- a/arch/Kconfig
 +++ b/arch/Kconfig
-@@ -1154,7 +1154,7 @@ config ARCH_MMAP_RND_BITS
+@@ -1209,7 +1209,7 @@ config ARCH_MMAP_RND_BITS
  	int "Number of bits to use for ASLR of mmap base address" if EXPERT
  	range ARCH_MMAP_RND_BITS_MIN ARCH_MMAP_RND_BITS_MAX
  	default ARCH_MMAP_RND_BITS_DEFAULT if ARCH_MMAP_RND_BITS_DEFAULT
@@ -9,7 +9,7 @@
  	depends on HAVE_ARCH_MMAP_RND_BITS
  	help
  	  This value can be used to select the number of bits to use to
-@@ -1188,7 +1188,7 @@ config ARCH_MMAP_RND_COMPAT_BITS
+@@ -1243,7 +1243,7 @@ config ARCH_MMAP_RND_COMPAT_BITS
  	int "Number of bits to use for ASLR of mmap base address for compatible applications" if EXPERT
  	range ARCH_MMAP_RND_COMPAT_BITS_MIN ARCH_MMAP_RND_COMPAT_BITS_MAX
  	default ARCH_MMAP_RND_COMPAT_BITS_DEFAULT if ARCH_MMAP_RND_COMPAT_BITS_DEFAULT
@@ -20,7 +20,7 @@
  	  This value can be used to select the number of bits to use to
 --- a/arch/x86/kernel/cpu/bugs.c
 +++ b/arch/x86/kernel/cpu/bugs.c
-@@ -3346,7 +3346,6 @@ static void __init vmscape_apply_mitigation(void)
+@@ -3266,7 +3266,6 @@ static void __init vmscape_apply_mitigation(void)
  #undef pr_fmt
  #define pr_fmt(fmt) fmt
  
@@ -28,7 +28,7 @@
  #define TAA_MSG_SMT "TAA CPU bug present and SMT on, data leak possible. See https://www.kernel.org/doc/html/latest/admin-guide/hw-vuln/tsx_async_abort.html for more details.\n"
  #define MMIO_MSG_SMT "MMIO Stale Data CPU bug present and SMT on, data leak possible. See https://www.kernel.org/doc/html/latest/admin-guide/hw-vuln/processor_mmio_stale_data.html for more details.\n"
  #define VMSCAPE_MSG_SMT "VMSCAPE: SMT on, STIBP is required for full protection. See https://www.kernel.org/doc/html/latest/admin-guide/hw-vuln/vmscape.html for more details.\n"
-@@ -3376,8 +3375,6 @@ void cpu_bugs_smt_update(void)
+@@ -3296,8 +3295,6 @@ void cpu_bugs_smt_update(void)
  	case MDS_MITIGATION_FULL:
  	case MDS_MITIGATION_AUTO:
  	case MDS_MITIGATION_VMWERV:
@@ -69,49 +69,6 @@
  		return -EPERM;
  	}
  
---- a/drivers/gpu/drm/i915/display/intel_psr.c
-+++ b/drivers/gpu/drm/i915/display/intel_psr.c
-@@ -3365,30 +3365,38 @@ static void _psr_flush_handle(struct intel_dp *intel_dp)
- 	struct intel_display *display = to_intel_display(intel_dp);
- 
- 	if (DISPLAY_VER(display) < 20 && intel_dp->psr.psr2_sel_fetch_enabled) {
-+		/* Selective fetch prior LNL */
- 		if (intel_dp->psr.psr2_sel_fetch_cff_enabled) {
- 			/* can we turn CFF off? */
- 			if (intel_dp->psr.busy_frontbuffer_bits == 0)
- 				intel_dp->psr.psr2_sel_fetch_cff_enabled = false;
- 		}
- 
- 		/*
- 		 * Still keep cff bit enabled as we don't have proper SU
- 		 * configuration in case update is sent for any reason after
- 		 * sff bit gets cleared by the HW on next vblank.
- 		 *
- 		 * NOTE: Setting cff bit is not needed for LunarLake onwards as
- 		 * we have own register for SFF bit and we are not overwriting
- 		 * existing SU configuration
- 		 */
- 		intel_psr_configure_full_frame_update(intel_dp);
- 
- 		intel_psr_force_update(intel_dp);
-+	} else if (!intel_dp->psr.psr2_sel_fetch_enabled) {
-+		/*
-+		 * PSR1 on all platforms
-+		 * PSR2 HW tracking
-+		 * Panel Replay Full frame update
-+		 */
-+		intel_psr_force_update(intel_dp);
- 	} else {
-+		/* Selective update LNL onwards */
- 		intel_psr_exit(intel_dp);
- 	}
- 
--	if ((!intel_dp->psr.psr2_sel_fetch_enabled || DISPLAY_VER(display) >= 20) &&
--	    !intel_dp->psr.busy_frontbuffer_bits)
-+	if (!intel_dp->psr.active && !intel_dp->psr.busy_frontbuffer_bits)
- 		queue_work(display->wq.unordered, &intel_dp->psr.work);
- }
- 
 --- a/kernel/fork.c
 +++ b/kernel/fork.c
 @@ -123,6 +123,12 @@
@@ -127,7 +84,7 @@
  /*
   * Minimum number of threads to boot the kernel
   */
-@@ -1982,6 +1988,11 @@ __latent_entropy struct task_struct *copy_process(
+@@ -1990,6 +1996,11 @@ __latent_entropy struct task_struct *copy_process(
  			return ERR_PTR(-EINVAL);
  	}
  
@@ -139,7 +96,7 @@
  	/*
  	 * Force any signals received before this point to be delivered
  	 * before the fork happens.  Collect up signals sent to multiple
-@@ -3023,6 +3034,10 @@ static int check_unshare_flags(unsigned long unshare_flags)
+@@ -3025,6 +3036,10 @@ static int check_unshare_flags(unsigned long unshare_flags)
  		if (!current_is_single_threaded())
  			return -EINVAL;
  	}
@@ -150,7 +107,7 @@
  
  	return 0;
  }
-@@ -3253,6 +3268,15 @@ static const struct ctl_table fork_sysctl_table[] = {
+@@ -3255,6 +3270,15 @@ static const struct ctl_table fork_sysctl_table[] = {
  		.mode		= 0644,
  		.proc_handler	= sysctl_max_threads,
  	},
