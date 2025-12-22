@@ -273,3 +273,48 @@
  };
  
  static int __init init_fork_sysctl(void)
+--- a/net/ipv4/esp4_offload.c
++++ b/net/ipv4/esp4_offload.c
+@@ -122,8 +122,8 @@ static struct sk_buff *xfrm4_tunnel_gso_segment(struct xfrm_state *x,
+ 						struct sk_buff *skb,
+ 						netdev_features_t features)
+ {
+-	const struct xfrm_mode *inner_mode = xfrm_ip2inner_mode(x,
+-					XFRM_MODE_SKB_CB(skb)->protocol);
++	struct xfrm_offload *xo = xfrm_offload(skb);
++	const struct xfrm_mode *inner_mode = xfrm_ip2inner_mode(x, xo->proto);
+ 	__be16 type = inner_mode->family == AF_INET6 ? htons(ETH_P_IPV6)
+ 						     : htons(ETH_P_IP);
+ 
+--- a/net/ipv6/esp6_offload.c
++++ b/net/ipv6/esp6_offload.c
+@@ -158,8 +158,8 @@ static struct sk_buff *xfrm6_tunnel_gso_segment(struct xfrm_state *x,
+ 						struct sk_buff *skb,
+ 						netdev_features_t features)
+ {
+-	const struct xfrm_mode *inner_mode = xfrm_ip2inner_mode(x,
+-					XFRM_MODE_SKB_CB(skb)->protocol);
++	struct xfrm_offload *xo = xfrm_offload(skb);
++	const struct xfrm_mode *inner_mode = xfrm_ip2inner_mode(x, xo->proto);
+ 	__be16 type = inner_mode->family == AF_INET ? htons(ETH_P_IP)
+ 						    : htons(ETH_P_IPV6);
+ 
+--- a/sound/soc/codecs/cs35l41.c
++++ b/sound/soc/codecs/cs35l41.c
+@@ -1188,13 +1188,14 @@ static int cs35l41_get_system_name(struct cs35l41_private *cs35l41)
+ 		}
+ 	}
+ 
+-err:
+ 	if (sub) {
+ 		cs35l41->dsp.system_name = sub;
+ 		dev_info(cs35l41->dev, "Subsystem ID: %s\n", cs35l41->dsp.system_name);
+-	} else
+-		dev_warn(cs35l41->dev, "Subsystem ID not found\n");
++		return 0;
++	}
+ 
++err:
++	dev_warn(cs35l41->dev, "Subsystem ID not found\n");
+ 	return ret;
+ }
