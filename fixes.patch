@@ -314,35 +314,6 @@
  	uint64_t				max_pfn;
  	uint32_t				num_level;
  	uint32_t				block_size;
---- a/drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c
-+++ b/drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c
-@@ -1209,14 +1209,8 @@ static int evict_process_queues_cpsch(struct device_queue_manager *dqm,
- 	pr_debug_ratelimited("Evicting process pid %d queues\n",
- 			    pdd->process->lead_thread->pid);
- 
--	if (dqm->dev->kfd->shared_resources.enable_mes) {
-+	if (dqm->dev->kfd->shared_resources.enable_mes)
- 		pdd->last_evict_timestamp = get_jiffies_64();
--		retval = suspend_all_queues_mes(dqm);
--		if (retval) {
--			dev_err(dev, "Suspending all queues failed");
--			goto out;
--		}
--	}
- 
- 	/* Mark all queues as evicted. Deactivate all active queues on
- 	 * the qpd.
-@@ -1246,10 +1240,6 @@ static int evict_process_queues_cpsch(struct device_queue_manager *dqm,
- 					      KFD_UNMAP_QUEUES_FILTER_ALL_QUEUES :
- 					      KFD_UNMAP_QUEUES_FILTER_DYNAMIC_QUEUES, 0,
- 					      USE_DEFAULT_GRACE_PERIOD);
--	} else {
--		retval = resume_all_queues_mes(dqm);
--		if (retval)
--			dev_err(dev, "Resuming all queues failed");
- 	}
- 
- out:
 --- a/kernel/fork.c
 +++ b/kernel/fork.c
 @@ -123,6 +123,12 @@
@@ -397,29 +368,3 @@
  };
  
  static int __init init_fork_sysctl(void)
---- a/net/ipv4/esp4_offload.c
-+++ b/net/ipv4/esp4_offload.c
-@@ -122,8 +122,8 @@ static struct sk_buff *xfrm4_tunnel_gso_segment(struct xfrm_state *x,
- 						struct sk_buff *skb,
- 						netdev_features_t features)
- {
--	const struct xfrm_mode *inner_mode = xfrm_ip2inner_mode(x,
--					XFRM_MODE_SKB_CB(skb)->protocol);
-+	struct xfrm_offload *xo = xfrm_offload(skb);
-+	const struct xfrm_mode *inner_mode = xfrm_ip2inner_mode(x, xo->proto);
- 	__be16 type = inner_mode->family == AF_INET6 ? htons(ETH_P_IPV6)
- 						     : htons(ETH_P_IP);
- 
---- a/net/ipv6/esp6_offload.c
-+++ b/net/ipv6/esp6_offload.c
-@@ -158,8 +158,8 @@ static struct sk_buff *xfrm6_tunnel_gso_segment(struct xfrm_state *x,
- 						struct sk_buff *skb,
- 						netdev_features_t features)
- {
--	const struct xfrm_mode *inner_mode = xfrm_ip2inner_mode(x,
--					XFRM_MODE_SKB_CB(skb)->protocol);
-+	struct xfrm_offload *xo = xfrm_offload(skb);
-+	const struct xfrm_mode *inner_mode = xfrm_ip2inner_mode(x, xo->proto);
- 	__be16 type = inner_mode->family == AF_INET ? htons(ETH_P_IP)
- 						    : htons(ETH_P_IPV6);
- 
