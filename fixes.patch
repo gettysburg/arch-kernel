@@ -1,6 +1,6 @@
 --- a/arch/Kconfig
 +++ b/arch/Kconfig
-@@ -1206,7 +1206,7 @@ config ARCH_MMAP_RND_BITS
+@@ -1209,7 +1209,7 @@ config ARCH_MMAP_RND_BITS
  	int "Number of bits to use for ASLR of mmap base address" if EXPERT
  	range ARCH_MMAP_RND_BITS_MIN ARCH_MMAP_RND_BITS_MAX
  	default ARCH_MMAP_RND_BITS_DEFAULT if ARCH_MMAP_RND_BITS_DEFAULT
@@ -9,7 +9,7 @@
  	depends on HAVE_ARCH_MMAP_RND_BITS
  	help
  	  This value can be used to select the number of bits to use to
-@@ -1240,7 +1240,7 @@ config ARCH_MMAP_RND_COMPAT_BITS
+@@ -1243,7 +1243,7 @@ config ARCH_MMAP_RND_COMPAT_BITS
  	int "Number of bits to use for ASLR of mmap base address for compatible applications" if EXPERT
  	range ARCH_MMAP_RND_COMPAT_BITS_MIN ARCH_MMAP_RND_COMPAT_BITS_MAX
  	default ARCH_MMAP_RND_COMPAT_BITS_DEFAULT if ARCH_MMAP_RND_COMPAT_BITS_DEFAULT
@@ -20,7 +20,7 @@
  	  This value can be used to select the number of bits to use to
 --- a/arch/x86/kernel/cpu/bugs.c
 +++ b/arch/x86/kernel/cpu/bugs.c
-@@ -3120,7 +3120,6 @@ static void __init vmscape_apply_mitigation(void)
+@@ -3119,7 +3119,6 @@ static void __init vmscape_apply_mitigation(void)
  #undef pr_fmt
  #define pr_fmt(fmt) fmt
  
@@ -28,7 +28,7 @@
  #define TAA_MSG_SMT "TAA CPU bug present and SMT on, data leak possible. See https://www.kernel.org/doc/html/latest/admin-guide/hw-vuln/tsx_async_abort.html for more details.\n"
  #define MMIO_MSG_SMT "MMIO Stale Data CPU bug present and SMT on, data leak possible. See https://www.kernel.org/doc/html/latest/admin-guide/hw-vuln/processor_mmio_stale_data.html for more details.\n"
  #define VMSCAPE_MSG_SMT "VMSCAPE: SMT on, STIBP is required for full protection. See https://www.kernel.org/doc/html/latest/admin-guide/hw-vuln/vmscape.html for more details.\n"
-@@ -3150,8 +3149,6 @@ void cpu_bugs_smt_update(void)
+@@ -3149,8 +3148,6 @@ void cpu_bugs_smt_update(void)
  	case MDS_MITIGATION_FULL:
  	case MDS_MITIGATION_AUTO:
  	case MDS_MITIGATION_VMWERV:
@@ -141,7 +141,7 @@
  
  	dma_resv_assert_held(buf->resv);
  
--	pages = kvmalloc_array(ubuf->pagecount, sizeof(*pages), GFP_KERNEL);
+-	pages = kvmalloc_objs(*pages, ubuf->pagecount);
 -	if (!pages)
 -		return -ENOMEM;
 -
@@ -177,7 +177,7 @@
 -	unsigned int i = 0;
  	int ret;
  
- 	sg = kzalloc(sizeof(*sg), GFP_KERNEL);
+ 	sg = kzalloc_obj(*sg);
  	if (!sg)
  		return ERR_PTR(-ENOMEM);
  
@@ -195,23 +195,21 @@
  	ret = dma_map_sgtable(dev, sg, direction, 0);
  	if (ret < 0)
  		goto err_map;
-@@ -207,28 +189,23 @@ static void unpin_all_folios(struct udmabuf *ubuf)
+@@ -207,26 +189,21 @@ static void unpin_all_folios(struct udmabuf *ubuf)
  
  static __always_inline int init_udmabuf(struct udmabuf *ubuf, pgoff_t pgcnt)
  {
--	ubuf->folios = kvmalloc_array(pgcnt, sizeof(*ubuf->folios), GFP_KERNEL);
+-	ubuf->folios = kvmalloc_objs(*ubuf->folios, pgcnt);
 -	if (!ubuf->folios)
 -		return -ENOMEM;
 -
--	ubuf->offsets = kvcalloc(pgcnt, sizeof(*ubuf->offsets), GFP_KERNEL);
+-	ubuf->offsets = kvzalloc_objs(*ubuf->offsets, pgcnt);
 -	if (!ubuf->offsets)
-+	ubuf->pages = kvmalloc_array(pgcnt, sizeof(*ubuf->pages), GFP_KERNEL);
++	ubuf->pages = kvmalloc_objs(*ubuf->pages, pgcnt);
 +	if (!ubuf->pages)
  		return -ENOMEM;
  
- 	ubuf->pinned_folios = kvmalloc_array(pgcnt,
- 					     sizeof(*ubuf->pinned_folios),
- 					     GFP_KERNEL);
+ 	ubuf->pinned_folios = kvmalloc_objs(*ubuf->pinned_folios, pgcnt);
  	if (!ubuf->pinned_folios)
  		return -ENOMEM;
  
@@ -227,7 +225,7 @@
  }
  
  static void release_udmabuf(struct dma_buf *buf)
-@@ -346,8 +323,8 @@ static long udmabuf_pin_folios(struct udmabuf *ubuf, struct file *memfd,
+@@ -344,8 +321,8 @@ static long udmabuf_pin_folios(struct udmabuf *ubuf, struct file *memfd,
  		ubuf->pinned_folios[nr_pinned++] = folios[cur_folio];
  
  		for (; subpgoff < fsize; subpgoff += PAGE_SIZE) {
@@ -240,7 +238,7 @@
  			if (++cur_pgcnt >= pgcnt)
 --- a/kernel/fork.c
 +++ b/kernel/fork.c
-@@ -123,6 +123,12 @@
+@@ -124,6 +124,12 @@
  
  #include <kunit/visibility.h>
  
@@ -253,7 +251,7 @@
  /*
   * Minimum number of threads to boot the kernel
   */
-@@ -2030,6 +2036,11 @@ __latent_entropy struct task_struct *copy_process(
+@@ -2028,6 +2034,11 @@ __latent_entropy struct task_struct *copy_process(
  			return ERR_PTR(-EINVAL);
  	}
  
@@ -265,7 +263,7 @@
  	/*
  	 * Force any signals received before this point to be delivered
  	 * before the fork happens.  Collect up signals sent to multiple
-@@ -3066,6 +3077,10 @@ static int check_unshare_flags(unsigned long unshare_flags)
+@@ -3069,6 +3080,10 @@ static int check_unshare_flags(unsigned long unshare_flags)
  		if (!current_is_single_threaded())
  			return -EINVAL;
  	}
@@ -276,7 +274,7 @@
  
  	return 0;
  }
-@@ -3296,6 +3311,15 @@ static const struct ctl_table fork_sysctl_table[] = {
+@@ -3299,6 +3314,15 @@ static const struct ctl_table fork_sysctl_table[] = {
  		.mode		= 0644,
  		.proc_handler	= sysctl_max_threads,
  	},
