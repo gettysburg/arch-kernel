@@ -47,6 +47,24 @@
  		}
  	}
  	wrmsrq(MSR_IA32_ENERGY_PERF_BIAS, (epb & ~EPB_MASK) | val);
+--- a/scripts/gcc-plugins/gcc-common.h
++++ b/scripts/gcc-plugins/gcc-common.h
+@@ -311,3 +311,4 @@ typedef const gimple *const_gimple_ptr;
+ #undef CONST_CAST_GIMPLE
+-#define CONST_CAST_GIMPLE(X) CONST_CAST(gimple, (X))
++#define CONST_CAST_GIMPLE(X) (gimple)(X)
++#define CONST_CAST_TREE(X) (tree)(X)
+ 
+@@ -416,3 +417,3 @@ static inline void debug_tree(const_tree t)
+ {
+-	debug_tree(CONST_CAST_TREE(t));
++	debug_tree((tree)t);
+ }
+@@ -424,3 +425,3 @@ static inline void debug_gimple_stmt(const_gimple s)
+ #else
+-#define debug_tree(t) debug_tree(CONST_CAST_TREE(t))
++#define debug_tree(t) debug_tree((tree)(t))
+ #define debug_gimple_stmt(s) debug_gimple_stmt(CONST_CAST_GIMPLE(s))
 --- a/security/lockdown/lockdown.c
 +++ b/security/lockdown/lockdown.c
 @@ -30,8 +30,7 @@ static int lock_kernel_down(const char *where, enum lockdown_reason level)
