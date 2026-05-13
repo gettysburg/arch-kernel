@@ -1,6 +1,6 @@
 --- a/arch/Kconfig
 +++ b/arch/Kconfig
-@@ -1209,7 +1209,7 @@ config ARCH_MMAP_RND_BITS
+@@ -1216,7 +1216,7 @@ config ARCH_MMAP_RND_BITS
  	int "Number of bits to use for ASLR of mmap base address" if EXPERT
  	range ARCH_MMAP_RND_BITS_MIN ARCH_MMAP_RND_BITS_MAX
  	default ARCH_MMAP_RND_BITS_DEFAULT if ARCH_MMAP_RND_BITS_DEFAULT
@@ -9,7 +9,7 @@
  	depends on HAVE_ARCH_MMAP_RND_BITS
  	help
  	  This value can be used to select the number of bits to use to
-@@ -1243,7 +1243,7 @@ config ARCH_MMAP_RND_COMPAT_BITS
+@@ -1250,7 +1250,7 @@ config ARCH_MMAP_RND_COMPAT_BITS
  	int "Number of bits to use for ASLR of mmap base address for compatible applications" if EXPERT
  	range ARCH_MMAP_RND_COMPAT_BITS_MIN ARCH_MMAP_RND_COMPAT_BITS_MAX
  	default ARCH_MMAP_RND_COMPAT_BITS_DEFAULT if ARCH_MMAP_RND_COMPAT_BITS_DEFAULT
@@ -254,9 +254,22 @@
  			++upgcnt;
  
  			if (++cur_pgcnt >= pgcnt)
+--- a/io_uring/zcrx.c
++++ b/io_uring/zcrx.c
+@@ -587,6 +587,10 @@ static void io_zcrx_return_niov_freelist(struct net_iov *niov)
+ 	struct io_zcrx_area *area = io_zcrx_iov_to_area(niov);
+ 
+ 	spin_lock_bh(&area->freelist_lock);
++	if (WARN_ON_ONCE(area->free_count >= area->nia.num_niovs)) {
++		spin_unlock_bh(&area->freelist_lock);
++		return;
++	}
+ 	area->freelist[area->free_count++] = net_iov_idx(niov);
+ 	spin_unlock_bh(&area->freelist_lock);
+ }
 --- a/kernel/fork.c
 +++ b/kernel/fork.c
-@@ -124,6 +124,12 @@
+@@ -125,6 +125,12 @@
  
  #include <kunit/visibility.h>
  
@@ -269,7 +282,7 @@
  /*
   * Minimum number of threads to boot the kernel
   */
-@@ -2028,6 +2034,11 @@ __latent_entropy struct task_struct *copy_process(
+@@ -2029,6 +2035,11 @@ __latent_entropy struct task_struct *copy_process(
  			return ERR_PTR(-EINVAL);
  	}
  
@@ -281,7 +294,7 @@
  	/*
  	 * Force any signals received before this point to be delivered
  	 * before the fork happens.  Collect up signals sent to multiple
-@@ -3069,6 +3080,10 @@ static int check_unshare_flags(unsigned long unshare_flags)
+@@ -3071,6 +3082,10 @@ static int check_unshare_flags(unsigned long unshare_flags)
  		if (!current_is_single_threaded())
  			return -EINVAL;
  	}
@@ -292,7 +305,7 @@
  
  	return 0;
  }
-@@ -3299,6 +3314,15 @@ static const struct ctl_table fork_sysctl_table[] = {
+@@ -3301,6 +3316,15 @@ static const struct ctl_table fork_sysctl_table[] = {
  		.mode		= 0644,
  		.proc_handler	= sysctl_max_threads,
  	},
