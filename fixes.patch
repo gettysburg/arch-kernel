@@ -1,6 +1,6 @@
 --- a/arch/Kconfig
 +++ b/arch/Kconfig
-@@ -1216,7 +1216,7 @@ config ARCH_MMAP_RND_BITS
+@@ -1215,7 +1215,7 @@ config ARCH_MMAP_RND_BITS
  	int "Number of bits to use for ASLR of mmap base address" if EXPERT
  	range ARCH_MMAP_RND_BITS_MIN ARCH_MMAP_RND_BITS_MAX
  	default ARCH_MMAP_RND_BITS_DEFAULT if ARCH_MMAP_RND_BITS_DEFAULT
@@ -9,7 +9,7 @@
  	depends on HAVE_ARCH_MMAP_RND_BITS
  	help
  	  This value can be used to select the number of bits to use to
-@@ -1250,7 +1250,7 @@ config ARCH_MMAP_RND_COMPAT_BITS
+@@ -1249,7 +1249,7 @@ config ARCH_MMAP_RND_COMPAT_BITS
  	int "Number of bits to use for ASLR of mmap base address for compatible applications" if EXPERT
  	range ARCH_MMAP_RND_COMPAT_BITS_MIN ARCH_MMAP_RND_COMPAT_BITS_MAX
  	default ARCH_MMAP_RND_COMPAT_BITS_DEFAULT if ARCH_MMAP_RND_COMPAT_BITS_DEFAULT
@@ -236,9 +236,157 @@
  			++upgcnt;
  
  			if (++cur_pgcnt >= pgcnt)
+--- a/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.c
++++ b/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.c
+@@ -2260,9 +2260,16 @@ static void amdgpu_dm_fini(struct amdgpu_device *adev)
+ 		adev->dm.idle_workqueue = NULL;
+ 	}
+ 
+-	/* Disable ISM before dc_destroy() invalidates dm->dc */
++	/*
++	 * Disable ISM before dc_destroy() invalidates dm->dc.
++	 *
++	 * Quiesce workers first without dc_lock (they take dc_lock
++	 * themselves, so syncing under it would deadlock), then drive the
++	 * FSM back to FULL_POWER_RUNNING under dc_lock.
++	 */
++	amdgpu_dm_ism_disable(&adev->dm);
+ 	scoped_guard(mutex, &adev->dm.dc_lock)
+-		amdgpu_dm_ism_disable(&adev->dm);
++		amdgpu_dm_ism_force_full_power(&adev->dm);
+ 
+ 	amdgpu_dm_destroy_drm_device(&adev->dm);
+ 
+@@ -3290,9 +3297,14 @@ static int dm_suspend(struct amdgpu_ip_block *ip_block)
+ 	if (amdgpu_in_reset(adev)) {
+ 		enum dc_status res;
+ 
++		/* Quiesce ISM workers before taking dc_lock (workers take
++		 * dc_lock themselves; syncing under it would deadlock).
++		 */
++		amdgpu_dm_ism_disable(dm);
++
+ 		mutex_lock(&dm->dc_lock);
+ 
+-		amdgpu_dm_ism_disable(dm);
++		amdgpu_dm_ism_force_full_power(dm);
+ 		dc_allow_idle_optimizations(adev->dm.dc, false);
+ 
+ 		dm->cached_dc_state = dc_state_create_copy(dm->dc->current_state);
+@@ -3326,8 +3338,13 @@ static int dm_suspend(struct amdgpu_ip_block *ip_block)
+ 
+ 	amdgpu_dm_irq_suspend(adev);
+ 
++	/*
++	 * Quiesce ISM workers before taking dc_lock (workers take dc_lock
++	 * themselves; syncing under it would deadlock).
++	 */
++	amdgpu_dm_ism_disable(dm);
+ 	scoped_guard(mutex, &dm->dc_lock)
+-		amdgpu_dm_ism_disable(dm);
++		amdgpu_dm_ism_force_full_power(dm);
+ 
+ 	hpd_rx_irq_work_suspend(dm);
+ 
+--- a/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm_ism.c
++++ b/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm_ism.c
+@@ -524,35 +524,75 @@ static void dm_ism_sso_delayed_work_func(struct work_struct *work)
+ }
+ 
+ /**
+- * amdgpu_dm_ism_disable - Disable the ISM
++ * amdgpu_dm_ism_disable - Quiesce ISM workers
+  *
+  * @dm: The amdgpu display manager
+  *
+- * Disable the idle state manager by disabling any ISM work, canceling pending
+- * work, and waiting for in-progress work to finish. After disabling, the system
+- * is left in DM_ISM_STATE_FULL_POWER_RUNNING state.
++ * Cancels and disables any pending or in-flight ISM delayed work and waits
++ * for in-progress work to finish. After this returns, no ISM worker can run
++ * and subsequent mod_delayed_work() calls become no-ops via
++ * clear_pending_if_disabled().
++ *
++ * Must NOT be called with dc_lock held: the workers themselves take dc_lock,
++ * so a synchronous wait under dc_lock would deadlock.
++ *
++ * The caller is responsible for driving the FSM back to FULL_POWER_RUNNING
++ * (under dc_lock) by calling amdgpu_dm_ism_force_full_power().
+  */
+ void amdgpu_dm_ism_disable(struct amdgpu_display_manager *dm)
+ {
+ 	struct drm_crtc *crtc;
+ 	struct amdgpu_crtc *acrtc;
+ 	struct amdgpu_dm_ism *ism;
+ 
+-	ASSERT(mutex_is_locked(&dm->dc_lock));
++	/*
++	 * Caller must NOT hold dc_lock: the ISM delayed work handlers
++	 * acquire dc_lock themselves, so waiting for them via
++	 * disable_delayed_work_sync() while holding dc_lock would
++	 * self-deadlock against an in-flight worker.
++	 */
++	lockdep_assert_not_held(&dm->dc_lock);
+ 
+ 	drm_for_each_crtc(crtc, dm->ddev) {
+ 		acrtc = to_amdgpu_crtc(crtc);
+ 		ism = &acrtc->ism;
+ 
+-		/* Cancel and disable any pending work */
+ 		disable_delayed_work_sync(&ism->delayed_work);
+ 		disable_delayed_work_sync(&ism->sso_delayed_work);
++	}
++}
++
++/**
++ * amdgpu_dm_ism_force_full_power - Force every CRTC's ISM FSM to FULL_POWER
++ *
++ * @dm: The amdgpu display manager
++ *
++ * Sends DM_ISM_EVENT_EXIT_IDLE_REQUESTED to every CRTC's ISM, leaving each
++ * FSM in FULL_POWER_RUNNING. Intended to be paired with
++ * amdgpu_dm_ism_disable(): callers should first quiesce workers (without
++ * dc_lock), then take dc_lock and call this helper.
++ *
++ * Must be called with dc_lock held.
++ */
++void amdgpu_dm_ism_force_full_power(struct amdgpu_display_manager *dm)
++{
++	struct drm_crtc *crtc;
++	struct amdgpu_crtc *acrtc;
++
++	/*
++	 * Caller must hold dc_lock: commit_event() drives the FSM and
++	 * may touch dc state via dc_allow_idle_optimizations() etc.
++	 */
++	lockdep_assert_held(&dm->dc_lock);
++
++	drm_for_each_crtc(crtc, dm->ddev) {
++		acrtc = to_amdgpu_crtc(crtc);
+ 
+ 		/*
+ 		 * When disabled, leave in FULL_POWER_RUNNING state.
+-		 * EXIT_IDLE will not queue any work
++		 * EXIT_IDLE will not queue any work.
+ 		 */
+-		amdgpu_dm_ism_commit_event(ism,
++		amdgpu_dm_ism_commit_event(&acrtc->ism,
+ 					   DM_ISM_EVENT_EXIT_IDLE_REQUESTED);
+ 	}
+ }
+--- a/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm_ism.h
++++ b/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm_ism.h
+@@ -146,6 +146,7 @@ void amdgpu_dm_ism_fini(struct amdgpu_dm_ism *ism);
+ void amdgpu_dm_ism_commit_event(struct amdgpu_dm_ism *ism,
+ 				enum amdgpu_dm_ism_event event);
+ void amdgpu_dm_ism_disable(struct amdgpu_display_manager *dm);
++void amdgpu_dm_ism_force_full_power(struct amdgpu_display_manager *dm);
+ void amdgpu_dm_ism_enable(struct amdgpu_display_manager *dm);
+ 
+ #endif
 --- a/kernel/fork.c
 +++ b/kernel/fork.c
-@@ -125,6 +125,12 @@
+@@ -126,6 +126,12 @@
  
  #include <kunit/visibility.h>
  
@@ -251,8 +399,8 @@
  /*
   * Minimum number of threads to boot the kernel
   */
-@@ -2031,6 +2037,11 @@ __latent_entropy struct task_struct *copy_process(
- 			return ERR_PTR(-EINVAL);
+@@ -2068,6 +2074,11 @@ __latent_entropy struct task_struct *copy_process(
+ 			return ERR_PTR(-EPERM);
  	}
  
 +	if ((clone_flags & CLONE_NEWUSER) && !unprivileged_userns_clone) {
@@ -263,7 +411,7 @@
  	/*
  	 * Force any signals received before this point to be delivered
  	 * before the fork happens.  Collect up signals sent to multiple
-@@ -3069,6 +3080,10 @@ static int check_unshare_flags(unsigned long unshare_flags)
+@@ -3136,6 +3147,10 @@ static int check_unshare_flags(unsigned long unshare_flags)
  		if (!current_is_single_threaded())
  			return -EINVAL;
  	}
@@ -274,7 +422,7 @@
  
  	return 0;
  }
-@@ -3302,6 +3317,15 @@ static const struct ctl_table fork_sysctl_table[] = {
+@@ -3371,6 +3386,15 @@ static const struct ctl_table fork_sysctl_table[] = {
  		.mode		= 0644,
  		.proc_handler	= sysctl_max_threads,
  	},
