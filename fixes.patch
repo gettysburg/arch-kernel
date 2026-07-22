@@ -20,7 +20,7 @@
  	  This value can be used to select the number of bits to use to
 --- a/arch/x86/kernel/cpu/bugs.c
 +++ b/arch/x86/kernel/cpu/bugs.c
-@@ -3119,7 +3119,6 @@ static void __init vmscape_apply_mitigation(void)
+@@ -3161,7 +3161,6 @@ static void __init vmscape_apply_mitigation(void)
  #undef pr_fmt
  #define pr_fmt(fmt) fmt
  
@@ -28,7 +28,7 @@
  #define TAA_MSG_SMT "TAA CPU bug present and SMT on, data leak possible. See https://www.kernel.org/doc/html/latest/admin-guide/hw-vuln/tsx_async_abort.html for more details.\n"
  #define MMIO_MSG_SMT "MMIO Stale Data CPU bug present and SMT on, data leak possible. See https://www.kernel.org/doc/html/latest/admin-guide/hw-vuln/processor_mmio_stale_data.html for more details.\n"
  #define VMSCAPE_MSG_SMT "VMSCAPE: SMT on, STIBP is required for full protection. See https://www.kernel.org/doc/html/latest/admin-guide/hw-vuln/vmscape.html for more details.\n"
-@@ -3149,8 +3148,6 @@ void cpu_bugs_smt_update(void)
+@@ -3191,8 +3190,6 @@ void cpu_bugs_smt_update(void)
  	case MDS_MITIGATION_FULL:
  	case MDS_MITIGATION_AUTO:
  	case MDS_MITIGATION_VMWERV:
@@ -69,9 +69,26 @@
  		return -EPERM;
  	}
  
+--- a/block/bio.c
++++ b/block/bio.c
+@@ -555,6 +555,14 @@ struct bio *bio_alloc_bioset(struct block_device *bdev, unsigned short nr_vecs,
+ 		bio = bio_alloc_percpu_cache(bs);
+ 	} else {
+ 		opf &= ~REQ_ALLOC_CACHE;
++	}
++
++	/*
++	 * For a bioset without a percpu cache, or when the percpu cache was
++	 * empty, try a slab allocation with optimistic GFP_ flags before
++	 * falling back to the mempool.
++	 */
++	if (!bio) {
+ 		p = kmem_cache_alloc(bs->bio_slab, gfp);
+ 		if (p)
+ 			bio = p + bs->front_pad;
 --- a/drivers/dma-buf/udmabuf.c
 +++ b/drivers/dma-buf/udmabuf.c
-@@ -26,55 +26,52 @@ MODULE_PARM_DESC(size_limit_mb, "Max size of a dmabuf, in megabytes. Default is
+@@ -26,56 +26,53 @@ MODULE_PARM_DESC(size_limit_mb, "Max size of a dmabuf, in megabytes. Default is
  
  struct udmabuf {
  	pgoff_t pagecount;
@@ -91,6 +108,7 @@
  	struct folio **pinned_folios;
  
  	struct sg_table *sg;
+ 	enum dma_data_direction sg_dir;
  	struct miscdevice *device;
 -	pgoff_t *offsets;
  };
@@ -131,7 +149,7 @@
  
  		/**
  		 * If the below vmf_insert_pfn() fails, we do not return an
-@@ -109,59 +106,44 @@ static int mmap_udmabuf(struct dma_buf *buf, struct vm_area_struct *vma)
+@@ -110,59 +107,44 @@ static int mmap_udmabuf(struct dma_buf *buf, struct vm_area_struct *vma)
  static int vmap_udmabuf(struct dma_buf *buf, struct iosys_map *map)
  {
  	struct udmabuf *ubuf = buf->priv;
@@ -192,10 +210,10 @@
 -		sg_set_folio(sgl, ubuf->folios[i], PAGE_SIZE,
 -			     ubuf->offsets[i]);
 -
- 	ret = dma_map_sgtable(dev, sg, direction, 0);
+ 	ret = dma_map_sgtable(dev, sg, direction, DMA_ATTR_SKIP_CPU_SYNC);
  	if (ret < 0)
  		goto err_map;
-@@ -207,26 +189,21 @@ static void unpin_all_folios(struct udmabuf *ubuf)
+@@ -208,26 +190,21 @@ static void unpin_all_folios(struct udmabuf *ubuf)
  
  static __always_inline int init_udmabuf(struct udmabuf *ubuf, pgoff_t pgcnt)
  {
@@ -225,7 +243,7 @@
  }
  
  static void release_udmabuf(struct dma_buf *buf)
-@@ -344,8 +321,8 @@ static long udmabuf_pin_folios(struct udmabuf *ubuf, struct file *memfd,
+@@ -347,8 +324,8 @@ static long udmabuf_pin_folios(struct udmabuf *ubuf, struct file *memfd,
  		ubuf->pinned_folios[nr_pinned++] = folios[cur_folio];
  
  		for (; subpgoff < fsize; subpgoff += PAGE_SIZE) {
@@ -236,6 +254,38 @@
  			++upgcnt;
  
  			if (++cur_pgcnt >= pgcnt)
+--- a/drivers/gpu/drm/amd/amdgpu/amdgpu_gem.c
++++ b/drivers/gpu/drm/amd/amdgpu/amdgpu_gem.c
+@@ -534,6 +534,7 @@ int amdgpu_gem_userptr_ioctl(struct drm_device *dev, void *data,
+ 	bo = gem_to_amdgpu_bo(gobj);
+ 	bo->preferred_domains = AMDGPU_GEM_DOMAIN_GTT;
+ 	bo->allowed_domains = AMDGPU_GEM_DOMAIN_GTT;
++	bo->parent = amdgpu_bo_ref(fpriv->vm.root.bo);
+ 	r = amdgpu_ttm_tt_set_userptr(&bo->tbo, args->addr, args->flags);
+ 	if (r)
+ 		goto release_object;
+--- a/drivers/gpu/drm/amd/amdgpu/amdgpu_hmm.c
++++ b/drivers/gpu/drm/amd/amdgpu/amdgpu_hmm.c
+@@ -67,18 +67,17 @@ static bool amdgpu_hmm_invalidate_gfx(struct mmu_interval_notifier *mni,
+ {
+ 	struct amdgpu_bo *bo = container_of(mni, struct amdgpu_bo, notifier);
+ 	struct amdgpu_device *adev = amdgpu_ttm_adev(bo->tbo.bdev);
+-	struct amdgpu_bo *vm_root = bo->vm_bo->vm->root.bo;
+ 	long r;
+ 
+ 	if (!mmu_notifier_range_blockable(range))
+ 		return false;
+ 
+ 	mutex_lock(&adev->notifier_lock);
+ 
+ 	mmu_interval_set_seq(mni, cur_seq);
+ 
+ 	amdgpu_vm_bo_invalidate(bo, false);
+-	r = dma_resv_wait_timeout(vm_root->tbo.base.resv,
++	r = dma_resv_wait_timeout(bo->parent->tbo.base.resv,
+ 				  DMA_RESV_USAGE_BOOKKEEP, false,
+ 				  MAX_SCHEDULE_TIMEOUT);
+ 	mutex_unlock(&adev->notifier_lock);
 --- a/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.c
 +++ b/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.c
 @@ -2260,9 +2260,16 @@ static void amdgpu_dm_fini(struct amdgpu_device *adev)

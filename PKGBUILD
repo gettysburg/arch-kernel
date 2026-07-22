@@ -1,7 +1,7 @@
 # Maintainer: George Hartley (altoid) <hartley_george@proton.me>
 
 pkgbase=linux-custom
-pkgver=7.1.3
+pkgver=7.1.4
 pkgrel=1
 pkgdesc='Linux'
 url='https://github.com/archlinux/linux'
@@ -33,14 +33,14 @@ validpgpkeys=(
   647F28654894E3BD457199BE38DBBDC86092693E  # Greg Kroah-Hartman
 )
 # https://www.kernel.org/pub/linux/kernel/v6.x/sha256sums.asc
-sha256sums=('be41c068e88f5242a19bccdbffbe077b18c47b45f627e2325504b4fab79dd1dc'
+sha256sums=('1c63922a119675d38e3ae0f8f6ee07f15c41a786ab9ed66563749bb8c9a08e2e'
             'SKIP'
-            '16240bbc8b3ab491ba7da83621d7c14e6f52923b519546cae2bcb4b25f7ff293'
-            'd69f4f1eadfaef0cae7c52615449a5b9cc2db6cf23f9baaf724ee45ee0fc3224')
-b2sums=('b6466e2798627522f0339c670a223b21266f4d4ede39163867c0f122295e54c5d24093abb51d5c6c6c917de0cb199836e81f45f7c391a5cc138cac2a519438e8'
+            '7ac37924ccc4c59d0f2af7236a30df52fb42c0128adbf509ed1c05e961ff3b71'
+            '765581189f4f8e967c78a46bef30fba8f3c85a8256b55bd5e0a12cc464ce705a')
+b2sums=('bb2b7d559325ce4138c46ad286335725b215ea2049e784efb55547bd3ff7883e508d2ef8c2fe20048b1a3b524e30b231fd06e5e81136a9e3a626e89e0a804628'
         'SKIP'
-        '8cdaeb8b80707af6e90bb8d60e29537ff7946b0c7e22805cddb37b3d004de3ede5cb577a29653adf05151aeaafdcaa575f8c7ce684bac133a802c1c56990f105'
-        '9ebb4befaa6759655a2a8a5cd38d886dfa3ece504001a332bf3990b0135ca61b41bdcaba8b722991f99dbb5b3f79a8052677bf2e2ca38f2c3a6b7ca3eb2487f5')
+        'df4229cbe6ef93137ddc437456cb5bfaacd570df093e58e27b3cf20d475f82e954e2a6a7f3f48aec592ed5323209d6f9813c28341c07e827b5143bd68faf714f'
+        '42b972b271e1e16c7f66c365749400a3aa6f3e11444aee565530813ea605f0b1eff253f0c530588fbc435134038bf9d18c9704d8d50fae94808b714d243b86fa')
 
 export KBUILD_BUILD_HOST=archlinux
 export KBUILD_BUILD_USER=$pkgbase
