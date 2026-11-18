@@ -1,6 +1,6 @@
 --- a/arch/Kconfig
 +++ b/arch/Kconfig
-@@ -1215,7 +1215,7 @@ config ARCH_MMAP_RND_BITS
+@@ -1228,7 +1228,7 @@ config ARCH_MMAP_RND_BITS
  	int "Number of bits to use for ASLR of mmap base address" if EXPERT
  	range ARCH_MMAP_RND_BITS_MIN ARCH_MMAP_RND_BITS_MAX
  	default ARCH_MMAP_RND_BITS_DEFAULT if ARCH_MMAP_RND_BITS_DEFAULT
@@ -9,7 +9,7 @@
  	depends on HAVE_ARCH_MMAP_RND_BITS
  	help
  	  This value can be used to select the number of bits to use to
-@@ -1249,7 +1249,7 @@ config ARCH_MMAP_RND_COMPAT_BITS
+@@ -1262,7 +1262,7 @@ config ARCH_MMAP_RND_COMPAT_BITS
  	int "Number of bits to use for ASLR of mmap base address for compatible applications" if EXPERT
  	range ARCH_MMAP_RND_COMPAT_BITS_MIN ARCH_MMAP_RND_COMPAT_BITS_MAX
  	default ARCH_MMAP_RND_COMPAT_BITS_DEFAULT if ARCH_MMAP_RND_COMPAT_BITS_DEFAULT
@@ -69,194 +69,90 @@
  		return -EPERM;
  	}
  
---- a/block/bio.c
-+++ b/block/bio.c
-@@ -555,6 +555,14 @@ struct bio *bio_alloc_bioset(struct block_device *bdev, unsigned short nr_vecs,
- 		bio = bio_alloc_percpu_cache(bs);
- 	} else {
- 		opf &= ~REQ_ALLOC_CACHE;
-+	}
+--- a/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.c
++++ b/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.c
+@@ -7088,16 +7088,11 @@ static void fill_stream_properties_from_drm_display_mode(
+ 	timing_out->v_border_top = 0;
+ 	timing_out->v_border_bottom = 0;
+ 	/* TODO: un-hardcode */
+-	if (drm_mode_is_420_only(info, mode_in)
+-			&& (stream->signal == SIGNAL_TYPE_HDMI_TYPE_A ||
+-			    stream->signal == SIGNAL_TYPE_HDMI_FRL)
+-			&& aconnector
+-			&& aconnector->force_yuv_pixel_format == PIXEL_ENCODING_YCBCR420)
+-		timing_out->pixel_encoding = PIXEL_ENCODING_YCBCR420;
+-	else if (drm_mode_is_420_also(info, mode_in)
+-			&& aconnector
+-			&& (aconnector->force_yuv_pixel_format == PIXEL_ENCODING_YCBCR420
+-			|| aconnector->force_yuv420_output))
++	if (drm_mode_is_420_only(info, mode_in) ||
++	    (aconnector &&
++	     (aconnector->force_yuv_pixel_format == PIXEL_ENCODING_YCBCR420 ||
++	      aconnector->force_yuv420_output) &&
++	     drm_mode_is_420_also(info, mode_in)))
+ 		timing_out->pixel_encoding = PIXEL_ENCODING_YCBCR420;
+ 	else if ((connector->display_info.color_formats & BIT(DRM_OUTPUT_COLOR_FORMAT_YCBCR422))
+ 			&& aconnector
+--- a/drivers/gpu/drm/i915/display/intel_dp.c
++++ b/drivers/gpu/drm/i915/display/intel_dp.c
+@@ -4889,16 +4889,54 @@ intel_edp_set_sink_rates(struct intel_dp *intel_dp)
+ 	intel_edp_set_data_override_rates(intel_dp);
+ }
+ 
++static void intel_edp_wake_sink(struct intel_dp *intel_dp)
++{
++	u8 value = 0;
++	int ret;
 +
 +	/*
-+	 * For a bioset without a percpu cache, or when the percpu cache was
-+	 * empty, try a slab allocation with optimistic GFP_ flags before
-+	 * falling back to the mempool.
++	 * Read the current sink power state. drm_dp_dpcd_read_byte() already
++	 * retries the AUX transaction internally, so a single read suffices.
++	 * First commercial eDP panels are Ver1.0 or 1.1, on which DPCD
++	 * DP_SET_POWER is supported.
 +	 */
-+	if (!bio) {
- 		p = kmem_cache_alloc(bs->bio_slab, gfp);
- 		if (p)
- 			bio = p + bs->front_pad;
---- a/drivers/dma-buf/udmabuf.c
-+++ b/drivers/dma-buf/udmabuf.c
-@@ -26,56 +26,53 @@ MODULE_PARM_DESC(size_limit_mb, "Max size of a dmabuf, in megabytes. Default is
- 
- struct udmabuf {
- 	pgoff_t pagecount;
--	struct folio **folios;
-+	struct page **pages;
- 
- 	/**
--	 * Unlike folios, pinned_folios is only used for unpin.
-+	 * Unlike pages, pinned_folios is only used for unpin.
- 	 * So, nr_pinned is not the same to pagecount, the pinned_folios
- 	 * only set each folio which already pinned when udmabuf_create.
- 	 * Note that, since a folio may be pinned multiple times, each folio
- 	 * can be added to pinned_folios multiple times, depending on how many
- 	 * times the folio has been pinned when create.
- 	 */
- 	pgoff_t nr_pinned;
- 	struct folio **pinned_folios;
- 
- 	struct sg_table *sg;
- 	enum dma_data_direction sg_dir;
- 	struct miscdevice *device;
--	pgoff_t *offsets;
- };
- 
- static vm_fault_t udmabuf_vm_fault(struct vm_fault *vmf)
++	ret = drm_dp_dpcd_read_byte(&intel_dp->aux, DP_SET_POWER, &value);
++
++	/*
++	 * If the AUX read failed the sink may be asleep and not responding,
++	 * or it read back D3; in either case wake it up to D0.
++	 * In case of AUX read failure which is usually a POR case, the
++	 * remaining bits of register 0x600 is set to '0' on POR. So a bare
++	 * write should be fine.
++	 */
++	if (ret < 0 || value == DP_SET_POWER_D3) {
++		value &= ~DP_SET_POWER_MASK;
++		value |= DP_SET_POWER_D0;
++		drm_dp_dpcd_write_byte(&intel_dp->aux, DP_SET_POWER,
++				       value);
++		/* After setting to D0 need a min of 1ms to wake (Spec DP2.1 sec 2.3.1.2) */
++		fsleep(1000);
++		drm_dp_dpcd_write_byte(&intel_dp->aux, DP_SET_POWER,
++				       value);
++	}
++}
++
+ static bool
+ intel_edp_init_dpcd(struct intel_dp *intel_dp, struct intel_connector *connector)
  {
- 	struct vm_area_struct *vma = vmf->vma;
- 	struct udmabuf *ubuf = vma->vm_private_data;
- 	pgoff_t pgoff = vmf->pgoff;
- 	unsigned long addr, pfn;
- 	vm_fault_t ret;
- 
- 	if (pgoff >= ubuf->pagecount)
- 		return VM_FAULT_SIGBUS;
- 
--	pfn = folio_pfn(ubuf->folios[pgoff]);
--	pfn += ubuf->offsets[pgoff] >> PAGE_SHIFT;
-+	pfn = page_to_pfn(ubuf->pages[pgoff]);
- 
- 	ret = vmf_insert_pfn(vma, vmf->address, pfn);
- 	if (ret & VM_FAULT_ERROR)
- 		return ret;
- 
- 	/* pre fault */
- 	pgoff = vma->vm_pgoff;
- 	addr = vma->vm_start;
- 
- 	for (; addr < vma->vm_end; pgoff++, addr += PAGE_SIZE) {
- 		if (addr == vmf->address)
- 			continue;
- 
- 		if (WARN_ON(pgoff >= ubuf->pagecount))
- 			break;
- 
--		pfn = folio_pfn(ubuf->folios[pgoff]);
--		pfn += ubuf->offsets[pgoff] >> PAGE_SHIFT;
-+		pfn = page_to_pfn(ubuf->pages[pgoff]);
- 
- 		/**
- 		 * If the below vmf_insert_pfn() fails, we do not return an
-@@ -110,59 +107,44 @@ static int mmap_udmabuf(struct dma_buf *buf, struct vm_area_struct *vma)
- static int vmap_udmabuf(struct dma_buf *buf, struct iosys_map *map)
- {
- 	struct udmabuf *ubuf = buf->priv;
--	struct page **pages;
- 	void *vaddr;
--	pgoff_t pg;
- 
- 	dma_resv_assert_held(buf->resv);
- 
--	pages = kvmalloc_objs(*pages, ubuf->pagecount);
--	if (!pages)
--		return -ENOMEM;
--
--	for (pg = 0; pg < ubuf->pagecount; pg++)
--		pages[pg] = folio_page(ubuf->folios[pg],
--				       ubuf->offsets[pg] >> PAGE_SHIFT);
--
--	vaddr = vm_map_ram(pages, ubuf->pagecount, -1);
--	kvfree(pages);
-+	vaddr = vm_map_ram(ubuf->pages, ubuf->pagecount, -1);
- 	if (!vaddr)
- 		return -EINVAL;
- 
- 	iosys_map_set_vaddr(map, vaddr);
- 	return 0;
- }
- 
- static void vunmap_udmabuf(struct dma_buf *buf, struct iosys_map *map)
- {
- 	struct udmabuf *ubuf = buf->priv;
- 
- 	dma_resv_assert_held(buf->resv);
- 
- 	vm_unmap_ram(map->vaddr, ubuf->pagecount);
- }
- 
- static struct sg_table *get_sg_table(struct device *dev, struct dma_buf *buf,
- 				     enum dma_data_direction direction)
- {
- 	struct udmabuf *ubuf = buf->priv;
- 	struct sg_table *sg;
--	struct scatterlist *sgl;
--	unsigned int i = 0;
+ 	struct intel_display *display = to_intel_display(intel_dp);
  	int ret;
+ 	u8 dprx;
  
- 	sg = kzalloc_obj(*sg);
- 	if (!sg)
- 		return ERR_PTR(-ENOMEM);
+ 	/* this function is meant to be called only once */
+ 	drm_WARN_ON(display->drm, intel_dp->dpcd[DP_DPCD_REV] != 0);
  
--	ret = sg_alloc_table(sg, ubuf->pagecount, GFP_KERNEL);
-+	ret = sg_alloc_table_from_pages(sg, ubuf->pages, ubuf->pagecount, 0,
-+					ubuf->pagecount << PAGE_SHIFT,
-+					GFP_KERNEL);
- 	if (ret < 0)
- 		goto err_alloc;
++	/*
++	 * Spec DP2.1 Section 3.5.2.16 page 966.
++	 * Also if sink is asleep, this will wake the sink.
++	 */
++	intel_edp_wake_sink(intel_dp);
++
+ 	if (drm_dp_read_dpcd_caps(&intel_dp->aux, intel_dp->dpcd) != 0)
+ 		return false;
  
--	for_each_sg(sg->sgl, sgl, ubuf->pagecount, i)
--		sg_set_folio(sgl, ubuf->folios[i], PAGE_SIZE,
--			     ubuf->offsets[i]);
--
- 	ret = dma_map_sgtable(dev, sg, direction, DMA_ATTR_SKIP_CPU_SYNC);
- 	if (ret < 0)
- 		goto err_map;
-@@ -208,26 +190,21 @@ static void unpin_all_folios(struct udmabuf *ubuf)
- 
- static __always_inline int init_udmabuf(struct udmabuf *ubuf, pgoff_t pgcnt)
- {
--	ubuf->folios = kvmalloc_objs(*ubuf->folios, pgcnt);
--	if (!ubuf->folios)
--		return -ENOMEM;
--
--	ubuf->offsets = kvzalloc_objs(*ubuf->offsets, pgcnt);
--	if (!ubuf->offsets)
-+	ubuf->pages = kvmalloc_objs(*ubuf->pages, pgcnt);
-+	if (!ubuf->pages)
- 		return -ENOMEM;
- 
- 	ubuf->pinned_folios = kvmalloc_objs(*ubuf->pinned_folios, pgcnt);
- 	if (!ubuf->pinned_folios)
- 		return -ENOMEM;
- 
- 	return 0;
- }
- 
- static __always_inline void deinit_udmabuf(struct udmabuf *ubuf)
- {
- 	unpin_all_folios(ubuf);
--	kvfree(ubuf->offsets);
--	kvfree(ubuf->folios);
-+	kvfree(ubuf->pages);
- }
- 
- static void release_udmabuf(struct dma_buf *buf)
-@@ -348,8 +325,8 @@ static long udmabuf_pin_folios(struct udmabuf *ubuf, struct file *memfd,
- 		ubuf->pinned_folios[nr_pinned++] = folios[cur_folio];
- 
- 		for (; subpgoff < fsize; subpgoff += PAGE_SIZE) {
--			ubuf->folios[upgcnt] = folios[cur_folio];
--			ubuf->offsets[upgcnt] = subpgoff;
-+			ubuf->pages[upgcnt] = folio_page(folios[cur_folio],
-+						subpgoff >> PAGE_SHIFT);
- 			++upgcnt;
- 
- 			if (++cur_pgcnt >= pgcnt)
 --- a/kernel/fork.c
 +++ b/kernel/fork.c
-@@ -126,6 +126,12 @@
+@@ -127,6 +127,12 @@
  
  #include <kunit/visibility.h>
  
@@ -269,7 +165,7 @@
  /*
   * Minimum number of threads to boot the kernel
   */
-@@ -2073,6 +2079,11 @@ __latent_entropy struct task_struct *copy_process(
+@@ -2094,6 +2100,11 @@ __latent_entropy struct task_struct *copy_process(
  			return ERR_PTR(-EPERM);
  	}
  
@@ -281,7 +177,7 @@
  	/*
  	 * Force any signals received before this point to be delivered
  	 * before the fork happens.  Collect up signals sent to multiple
-@@ -3138,6 +3149,10 @@ static int check_unshare_flags(unsigned long unshare_flags)
+@@ -3174,6 +3185,10 @@ static int check_unshare_flags(unsigned long unshare_flags)
  		if (!current_is_single_threaded())
  			return -EINVAL;
  	}
@@ -292,7 +188,7 @@
  
  	return 0;
  }
-@@ -3373,6 +3388,15 @@ static const struct ctl_table fork_sysctl_table[] = {
+@@ -3410,6 +3425,15 @@ static const struct ctl_table fork_sysctl_table[] = {
  		.mode		= 0644,
  		.proc_handler	= sysctl_max_threads,
  	},
