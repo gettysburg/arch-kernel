@@ -1,6 +1,6 @@
 --- a/arch/Kconfig
 +++ b/arch/Kconfig
-@@ -1228,7 +1228,7 @@ config ARCH_MMAP_RND_BITS
+@@ -1245,7 +1245,7 @@ config ARCH_MMAP_RND_BITS
  	int "Number of bits to use for ASLR of mmap base address" if EXPERT
  	range ARCH_MMAP_RND_BITS_MIN ARCH_MMAP_RND_BITS_MAX
  	default ARCH_MMAP_RND_BITS_DEFAULT if ARCH_MMAP_RND_BITS_DEFAULT
@@ -9,7 +9,7 @@
  	depends on HAVE_ARCH_MMAP_RND_BITS
  	help
  	  This value can be used to select the number of bits to use to
-@@ -1262,7 +1262,7 @@ config ARCH_MMAP_RND_COMPAT_BITS
+@@ -1279,7 +1279,7 @@ config ARCH_MMAP_RND_COMPAT_BITS
  	int "Number of bits to use for ASLR of mmap base address for compatible applications" if EXPERT
  	range ARCH_MMAP_RND_COMPAT_BITS_MIN ARCH_MMAP_RND_COMPAT_BITS_MAX
  	default ARCH_MMAP_RND_COMPAT_BITS_DEFAULT if ARCH_MMAP_RND_COMPAT_BITS_DEFAULT
@@ -20,7 +20,7 @@
  	  This value can be used to select the number of bits to use to
 --- a/arch/x86/kernel/cpu/bugs.c
 +++ b/arch/x86/kernel/cpu/bugs.c
-@@ -3161,7 +3161,6 @@ static void __init vmscape_apply_mitigation(void)
+@@ -3173,7 +3173,6 @@ static void __init vmscape_apply_mitigation(void)
  #undef pr_fmt
  #define pr_fmt(fmt) fmt
  
@@ -28,7 +28,7 @@
  #define TAA_MSG_SMT "TAA CPU bug present and SMT on, data leak possible. See https://www.kernel.org/doc/html/latest/admin-guide/hw-vuln/tsx_async_abort.html for more details.\n"
  #define MMIO_MSG_SMT "MMIO Stale Data CPU bug present and SMT on, data leak possible. See https://www.kernel.org/doc/html/latest/admin-guide/hw-vuln/processor_mmio_stale_data.html for more details.\n"
  #define VMSCAPE_MSG_SMT "VMSCAPE: SMT on, STIBP is required for full protection. See https://www.kernel.org/doc/html/latest/admin-guide/hw-vuln/vmscape.html for more details.\n"
-@@ -3191,8 +3190,6 @@ void cpu_bugs_smt_update(void)
+@@ -3203,8 +3202,6 @@ void cpu_bugs_smt_update(void)
  	case MDS_MITIGATION_FULL:
  	case MDS_MITIGATION_AUTO:
  	case MDS_MITIGATION_VMWERV:
@@ -69,33 +69,9 @@
  		return -EPERM;
  	}
  
---- a/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.c
-+++ b/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.c
-@@ -7088,16 +7088,11 @@ static void fill_stream_properties_from_drm_display_mode(
- 	timing_out->v_border_top = 0;
- 	timing_out->v_border_bottom = 0;
- 	/* TODO: un-hardcode */
--	if (drm_mode_is_420_only(info, mode_in)
--			&& (stream->signal == SIGNAL_TYPE_HDMI_TYPE_A ||
--			    stream->signal == SIGNAL_TYPE_HDMI_FRL)
--			&& aconnector
--			&& aconnector->force_yuv_pixel_format == PIXEL_ENCODING_YCBCR420)
--		timing_out->pixel_encoding = PIXEL_ENCODING_YCBCR420;
--	else if (drm_mode_is_420_also(info, mode_in)
--			&& aconnector
--			&& (aconnector->force_yuv_pixel_format == PIXEL_ENCODING_YCBCR420
--			|| aconnector->force_yuv420_output))
-+	if (drm_mode_is_420_only(info, mode_in) ||
-+	    (aconnector &&
-+	     (aconnector->force_yuv_pixel_format == PIXEL_ENCODING_YCBCR420 ||
-+	      aconnector->force_yuv420_output) &&
-+	     drm_mode_is_420_also(info, mode_in)))
- 		timing_out->pixel_encoding = PIXEL_ENCODING_YCBCR420;
- 	else if ((connector->display_info.color_formats & BIT(DRM_OUTPUT_COLOR_FORMAT_YCBCR422))
- 			&& aconnector
 --- a/drivers/gpu/drm/i915/display/intel_dp.c
 +++ b/drivers/gpu/drm/i915/display/intel_dp.c
-@@ -4889,16 +4889,54 @@ intel_edp_set_sink_rates(struct intel_dp *intel_dp)
+@@ -4785,16 +4785,54 @@ intel_edp_set_sink_rates(struct intel_dp *intel_dp)
  	intel_edp_set_data_override_rates(intel_dp);
  }
  
@@ -165,7 +141,7 @@
  /*
   * Minimum number of threads to boot the kernel
   */
-@@ -2094,6 +2100,11 @@ __latent_entropy struct task_struct *copy_process(
+@@ -2130,6 +2136,11 @@ __latent_entropy struct task_struct *copy_process(
  			return ERR_PTR(-EPERM);
  	}
  
@@ -177,7 +153,7 @@
  	/*
  	 * Force any signals received before this point to be delivered
  	 * before the fork happens.  Collect up signals sent to multiple
-@@ -3174,6 +3185,10 @@ static int check_unshare_flags(unsigned long unshare_flags)
+@@ -3213,6 +3224,10 @@ static int check_unshare_flags(unsigned long unshare_flags)
  		if (!current_is_single_threaded())
  			return -EINVAL;
  	}
@@ -188,7 +164,7 @@
  
  	return 0;
  }
-@@ -3410,6 +3425,15 @@ static const struct ctl_table fork_sysctl_table[] = {
+@@ -3446,6 +3461,15 @@ static const struct ctl_table fork_sysctl_table[] = {
  		.mode		= 0644,
  		.proc_handler	= sysctl_max_threads,
  	},
